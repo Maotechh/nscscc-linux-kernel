@@ -1,0 +1,14 @@
+*.o
+*.ko
+*.mod.c
+*.mod
+*.cmd
+*.d
+.tmp_*
+vmlinux
+vmlinux.bin
+System.map
+Module.symvers
+modules.order
+!.gitignore
+

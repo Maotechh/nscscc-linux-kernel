@@ -1,0 +1,36 @@
+diff --git a/arch/loongarch/loongson32/serial.c b/arch/loongarch/loongson32/serial.c
+index e53dd3f74..3494c8a8f 100644
+--- a/arch/loongarch/loongson32/serial.c
++++ b/arch/loongarch/loongson32/serial.c
+@@ -27,9 +27,10 @@
+ 	.regshift	= 0,					\
+ }
+ 
++/* UART clock: 实验箱=33M, 竞赛SoC(nscscc-team)=100M. Also update dts. */
+ static struct plat_serial8250_port uart8250_data[][3] = {
+-	[0]	= {PORT_M(2, 33000000), {} },
+-	[1] = {PORT_M(2, 33000000), {} },
++	[0]	= {PORT_M(2, 100000000), {} },
++	[1] = {PORT_M(2, 100000000), {} },
+ 	[2]	= {},
+ };
+ 
+@@ -47,14 +48,14 @@ static int __init serial_init(void)
+ 
+ 	iotype = uart8250_data[1][0].iotype;
+ 
++	memset(&uart8250_data[1][0],
++			0, sizeof(struct plat_serial8250_port));
++
+ 		uart8250_data[1][0].mapbase =
+ 			loongson_uart_base[0];
+ 		uart8250_data[1][0].membase =
+ 			(void __iomem *)_loongson_uart_base[0];
+-		uart8250_data[1][0].uartclk =0x10000000;
+-
+-	memset(&uart8250_data[1][0],
+-			0, sizeof(struct plat_serial8250_port));
++		uart8250_data[1][0].uartclk = 100000000;
+ 	uart8250_device.dev.platform_data = uart8250_data[1];
+ 
+ 	return platform_device_register(&uart8250_device);
