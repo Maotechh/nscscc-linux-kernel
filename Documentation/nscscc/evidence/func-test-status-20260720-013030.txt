@@ -1,0 +1,74 @@
+2026/7/20 1:30:30 connected=-1
+2026/7/20 1:30:30 test_file=nscscc-func-main.elf
+2026/7/20 1:30:30 test_size=544264
+2026/7/20 1:30:30 test_sha256=c5482259e2f48c76b8a667de71af11b96bf73bbb4d0494ef379e86a79b4b984e
+2026/7/20 1:30:30 test_crc32=9c1eff19
+2026/7/20 1:30:30 uboot_prompt_attempt=1
+2026/7/20 1:30:30 uboot_prompt=True
+2026/7/20 1:30:31 command=setenv ipaddr 10.90.50.44
+2026/7/20 1:30:31 output_begin
+setenv ipaddr 10.90.50.44; echo __SET_IP__
+__SET_IP__
+
+2026/7/20 1:30:31 output_end
+2026/7/20 1:30:31 marker_seen=True
+2026/7/20 1:30:32 command=setenv serverip 10.90.50.43
+2026/7/20 1:30:32 output_begin
+setenv serverip 10.90.50.43; echo __SET_SERVER__
+__SET_SERVER__
+
+2026/7/20 1:30:32 output_end
+2026/7/20 1:30:32 marker_seen=True
+2026/7/20 1:30:33 command=setenv netmask 255.255.255.0
+2026/7/20 1:30:33 output_begin
+setenv netmask 255.255.255.0; echo __SET_MASK__
+__SET_MASK__
+
+2026/7/20 1:30:33 output_end
+2026/7/20 1:30:33 marker_seen=True
+2026/7/20 1:30:33 command=setenv ethaddr 00:98:76:64:32:19
+2026/7/20 1:30:33 output_begin
+setenv ethaddr 00:98:76:64:32:19; echo __SET_MAC__
+__SET_MAC__
+
+2026/7/20 1:30:33 output_end
+2026/7/20 1:30:33 marker_seen=True
+2026/7/20 1:30:34 command=ping 10.90.50.43
+2026/7/20 1:30:34 output_begin
+ping 10.90.50.43; echo __PING_DONE__
+Using ethernet@0x9ff00000 device
+host 10.90.50.43 is alive
+__PING_DONE__
+
+2026/7/20 1:30:34 output_end
+2026/7/20 1:30:34 marker_seen=True
+2026/7/20 1:30:34 expected_seen=True expected=is alive
+2026/7/20 1:30:37 command=tftpboot 0xa3000000 nscscc-func-main.elf
+2026/7/20 1:30:37 output_begin
+tftpboot 0xa3000000 nscscc-func-main.elf; echo __TFTP_DONE__
+Using ethernet@0x9ff00000 device
+TFTP from server 10.90.50.43; our IP address is 10.90.50.44
+Filename 'nscscc-func-main.elf'.
+Load address: 0xa3000000
+Loading: *#################################################################
+	 ##########################################
+	 262.7 KiB/s
+done
+Bytes transferred = 544264 (84e08 hex)
+__TFTP_DONE__
+
+2026/7/20 1:30:37 output_end
+2026/7/20 1:30:37 marker_seen=True
+2026/7/20 1:30:37 expected_seen=True expected=Bytes transferred = 544264
+2026/7/20 1:30:38 command=crc32 0xa3000000 ${filesize}
+2026/7/20 1:30:38 output_begin
+crc32 0xa3000000 ${filesize}; echo __CRC_DONE__
+CRC32 for a3000000 ... a3084e07 ==> 9c1eff19
+__CRC_DONE__
+
+2026/7/20 1:30:38 output_end
+2026/7/20 1:30:38 marker_seen=True
+2026/7/20 1:30:38 expected_seen=True expected=9c1eff19
+2026/7/20 1:30:38 bootelf_sent=true
+2026/7/20 1:30:38 panel_expected=3A00003A
+2026/7/20 1:32:08 result=executed panel_observation_required

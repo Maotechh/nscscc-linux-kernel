@@ -1,0 +1,4 @@
+initramfs=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-repro/initramfs-repeat.cpio.gz
+size=4219994
+sha256=16f278d2abbb933661032f333250752a1c4291a08c21bafbed84bb0667b52b16
+crc32=7f2d5e5d

@@ -30,6 +30,25 @@ config TTY_PRINTK_LEVEL
 	help
 	  Printk log level to use for ttyprintk messages.
 
+config CHIPLAB_CONFREG
+	tristate "Chiplab experiment-box configuration registers"
+	depends on OF && HAS_IOMEM
+	help
+	  Expose the Chiplab Loongson experiment box switches, buttons, LEDs,
+	  seven-segment display, timer, and frequency registers through sysfs and
+	  /dev/chiplab_confreg.
+
+	  Select this option only when the device tree contains a compatible
+	  loongson,chiplab_confreg register block.
+
+config CHIPLAB_NT35510
+	tristate "Chiplab NT35510 parallel LCD character device"
+	depends on OF && HAS_IOMEM
+	help
+	  Enable the character device driver for the NT35510 parallel LCD
+	  controller used by the experiment-box LCD connector. The driver
+	  creates /dev/nt35510 and expects a lcd,nt35510 device tree node.
+
 config PRINTER
 	tristate "Parallel printer support"
 	depends on PARPORT

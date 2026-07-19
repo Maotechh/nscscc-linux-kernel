@@ -1,0 +1,464 @@
+2026/7/19 23:04:09 connected=-1
+2026/7/19 23:04:09 kernel_file=vmlinux-db7abacb8-confreg
+2026/7/19 23:04:09 kernel_size=16232468
+2026/7/19 23:04:09 kernel_sha256=83d5b557105d5c515218c5cdcf2e9c04a39600591491ba31b8e6c1196a386f83
+2026/7/19 23:04:09 kernel_crc32=e62f945e
+2026/7/19 23:04:09 uboot_prompt_attempt=1
+2026/7/19 23:04:09 uboot_prompt=True
+2026/7/19 23:04:10 command=setenv ipaddr 10.90.50.44
+2026/7/19 23:04:10 output_begin
+setenv ipaddr 10.90.50.44; echo __SET_IP__
+__SET_IP__
+
+2026/7/19 23:04:10 output_end
+2026/7/19 23:04:10 marker_seen=True
+2026/7/19 23:04:11 command=setenv serverip 10.90.50.43
+2026/7/19 23:04:11 output_begin
+setenv serverip 10.90.50.43; echo __SET_SERVER__
+__SET_SERVER__
+
+2026/7/19 23:04:11 output_end
+2026/7/19 23:04:11 marker_seen=True
+2026/7/19 23:04:11 command=setenv netmask 255.255.255.0
+2026/7/19 23:04:11 output_begin
+setenv netmask 255.255.255.0; echo __SET_MASK__
+__SET_MASK__
+
+2026/7/19 23:04:11 output_end
+2026/7/19 23:04:11 marker_seen=True
+2026/7/19 23:04:12 command=setenv ethaddr 00:98:76:64:32:19
+2026/7/19 23:04:12 output_begin
+setenv ethaddr 00:98:76:64:32:19; echo __SET_MAC__
+__SET_MAC__
+
+2026/7/19 23:04:12 output_end
+2026/7/19 23:04:12 marker_seen=True
+2026/7/19 23:04:13 command=ping 10.90.50.43
+2026/7/19 23:04:13 output_begin
+ping 10.90.50.43; echo __PING_DONE__
+Using ethernet@0x9ff00000 device
+host 10.90.50.43 is alive
+__PING_DONE__
+
+2026/7/19 23:04:13 output_end
+2026/7/19 23:04:13 marker_seen=True
+2026/7/19 23:04:13 expected_seen=True expected=is alive
+2026/7/19 23:05:13 command=tftpboot 0xa3000000 vmlinux-db7abacb8-confreg
+2026/7/19 23:05:13 output_begin
+tftpboot 0xa3000000 vmlinux-db7abacb8-confreg; echo __TFTP_DONE__
+Using ethernet@0x9ff00000 device
+TFTP from server 10.90.50.43; our IP address is 10.90.50.44
+Filename 'vmlinux-db7abacb8-confreg'.
+Load address: 0xa3000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 ###################################################
+	 267.6 KiB/s
+done
+Bytes transferred = 16232468 (f7b014 hex)
+__TFTP_DONE__
+
+2026/7/19 23:05:13 output_end
+2026/7/19 23:05:13 marker_seen=True
+2026/7/19 23:05:13 expected_seen=True expected=Bytes transferred = 16232468
+2026/7/19 23:05:18 command=crc32 0xa3000000 ${filesize}
+2026/7/19 23:05:18 output_begin
+crc32 0xa3000000 ${filesize}; echo __CRC_DONE__
+CRC32 for a3000000 ... a3f7b013 ==> e62f945e
+__CRC_DONE__
+
+2026/7/19 23:05:18 output_end
+2026/7/19 23:05:18 marker_seen=True
+2026/7/19 23:05:18 expected_seen=True expected=e62f945e
+2026/7/19 23:05:19 bootelf_sent=true
+2026/7/19 23:05:56 linux_banner=-1
+2026/7/19 23:05:56 linux_shell=-1
+2026/7/19 23:05:57 command=set +m
+2026/7/19 23:05:57 output_begin
+set +m; echo __DONE_SETM__
+__DONE_SETM__
+
+2026/7/19 23:05:57 output_end
+2026/7/19 23:05:57 marker_seen=True
+2026/7/19 23:05:58 command=uname -a
+2026/7/19 23:05:58 output_begin
+uname -a; echo __DONE_UNAME__
+Linux nscscc-la32r 5.14.0-rc2-gdb7abacb8820-dirty #1 PREEMPT Sun Jul 19 21:29:12 CST 2026 loongarch32r GNU/Linux
+__DONE_UNAME__
+
+2026/7/19 23:05:58 output_end
+2026/7/19 23:05:58 marker_seen=True
+2026/7/19 23:05:58 expected_seen=True expected=Linux
+2026/7/19 23:06:00 command=grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo
+2026/7/19 23:06:00 output_begin
+grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo; echo __DONE_MEM__
+MemTotal:         115628 kB
+MemFree:           94988 kB
+MemAvailable:      93088 kB
+__DONE_MEM__
+
+2026/7/19 23:06:00 output_end
+2026/7/19 23:06:00 marker_seen=True
+2026/7/19 23:06:00 expected_seen=True expected=MemTotal
+2026/7/19 23:06:01 command=mount
+2026/7/19 23:06:01 output_begin
+mount; echo __DONE_MOUNT__
+rootfs on / type rootfs (rw,size=55652k,nr_inodes=13913)
+devtmpfs on /dev type devtmpfs (rw,relatime,size=55652k,nr_inodes=13913,mode=755)
+proc on /proc type proc (rw,relatime)
+sysfs on /sys type sysfs (rw,relatime)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+tmpfs on /run type tmpfs (rw,nosuid,nodev,relatime,mode=755)
+__DONE_MOUNT__
+
+2026/7/19 23:06:01 output_end
+2026/7/19 23:06:01 marker_seen=True
+2026/7/19 23:06:01 expected_seen=True expected=devtmpfs
+2026/7/19 23:06:03 command=cat /etc/nscscc/build-info
+2026/7/19 23:06:03 output_begin
+cat /etc/nscscc/build-info; echo __DONE_BUILD_INFO__
+KERNEL_SOURCE_COMMIT=db7abacb8820fd0ca5212e2930d74118be7d8a8e
+BUSYBOX_ORIGIN=base-rootfs
+BUSYBOX_SHA256=6cbbd48ede7f5c900ec02c44fa2ce8a2357ddb2ec8e43a88856c76e2bde6ae7f
+SOURCE_DATE_EPOCH=0
+__DONE_BUILD_INFO__
+
+2026/7/19 23:06:03 output_end
+2026/7/19 23:06:03 marker_seen=True
+2026/7/19 23:06:03 expected_seen=True expected=db7abacb8820fd0ca5212e2930d74118be7d8a8e
+2026/7/19 23:06:05 command=cat /sys/class/chiplab_confreg/chiplab_confreg/device_info
+2026/7/19 23:06:05 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/device_info; echo __DONE_CONF
+REG_INFO__
+Chiplab Confreg Device (Loongson)
+Physical base: 0x1fd0e000
+Character device: 249:0
+Platform device: 1fd0e000.confreg
+__DONE_CONFREG_INFO__
+
+2026/7/19 23:06:05 output_end
+2026/7/19 23:06:05 marker_seen=True
+2026/7/19 23:06:05 expected_seen=True expected=Physical base
+2026/7/19 23:06:07 command=cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs
+2026/7/19 23:06:07 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs; echo __DONE_CONFR
+EG_INPUTS__
+switches=0xf6 buttons=0x0000 step=0x00 freq=33000000Hz
+__DONE_CONFREG_INPUTS__
+
+2026/7/19 23:06:07 output_end
+2026/7/19 23:06:07 marker_seen=True
+2026/7/19 23:06:07 expected_seen=True expected=switches=
+2026/7/19 23:06:08 command=ip addr show
+2026/7/19 23:06:08 output_begin
+ip addr show; echo __DONE_IP_ADDR__
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 1000
+    link/ether 00:98:76:64:32:19 brd ff:ff:ff:ff:ff:ff
+    inet 10.90.50.44/24 scope global eth0
+       valid_lft forever preferred_lft forever
+3: dummy0: <BROADCAST,NOARP> mtu 1500 qdisc noop qlen 1000
+    link/ether 9a:f3:eb:31:32:71 brd ff:ff:ff:ff:ff:ff
+4: sit0@NONE: <NOARP> mtu 1480 qdisc noop qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+__DONE_IP_ADDR__
+
+2026/7/19 23:06:08 output_end
+2026/7/19 23:06:08 marker_seen=True
+2026/7/19 23:06:08 expected_seen=True expected=10.90.50.44/24
+2026/7/19 23:06:12 command=cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics/tx_packets /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statistics/tx_errors
+2026/7/19 23:06:12 output_begin
+cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics
+/tx_packets /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statist
+ics/tx_errors; echo __DONE_IP_LINK__
+[    9.440000] dev 1:Link OK 4
+[    9.440000]  dmfe: Change Speed to 100Mhz full duplex
+19
+8
+0
+0
+__DONE_IP_LINK__
+
+2026/7/19 23:06:12 output_end
+2026/7/19 23:06:12 marker_seen=True
+2026/7/19 23:06:13 command=cat /sys/class/net/eth0/carrier
+2026/7/19 23:06:13 output_begin
+cat /sys/class/net/eth0/carrier; echo __DONE_CARRIER__
+1
+__DONE_CARRIER__
+
+2026/7/19 23:06:13 output_end
+2026/7/19 23:06:13 marker_seen=True
+2026/7/19 23:06:13 expected_seen=True expected=1
+2026/7/19 23:06:15 command=cat /proc/interrupts
+2026/7/19 23:06:15 output_begin
+cat /proc/interrupts; echo __DONE_IRQ_BEFORE__
+           CPU0       
+ 18:         25  LoongArch   2  eth0
+ 19:       3083  LoongArch   3  ttyS0
+ 27:       1973  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_BEFORE__
+
+2026/7/19 23:06:15 output_end
+2026/7/19 23:06:15 marker_seen=True
+2026/7/19 23:06:15 expected_seen=True expected=timer
+2026/7/19 23:06:16 command=ping -c 1 -W 2 10.90.50.43
+2026/7/19 23:06:16 output_begin
+ping -c 1 -W 2 10.90.50.43; echo __DONE_PING_A__
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=3.952 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 3.952/3.952/3.952 ms
+__DONE_PING_A__
+
+2026/7/19 23:06:16 output_end
+2026/7/19 23:06:16 marker_seen=True
+2026/7/19 23:06:16 expected_seen=True expected=0% packet loss
+2026/7/19 23:06:18 command=ping -c 1 -W 2 10.90.50.43
+2026/7/19 23:06:18 output_begin
+ping -c 1 -W 2 10.90.50.43; echo __DONE_PING_B__
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.284 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.284/2.284/2.284 ms
+__DONE_PING_B__
+
+2026/7/19 23:06:18 output_end
+2026/7/19 23:06:18 marker_seen=True
+2026/7/19 23:06:18 expected_seen=True expected=0% packet loss
+2026/7/19 23:06:19 command=ping -c 1 -W 2 10.90.50.43
+2026/7/19 23:06:19 output_begin
+ping -c 1 -W 2 10.90.50.43; echo __DONE_PING_C__
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.023 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.023/2.023/2.023 ms
+__DONE_PING_C__
+
+2026/7/19 23:06:19 output_end
+2026/7/19 23:06:19 marker_seen=True
+2026/7/19 23:06:19 expected_seen=True expected=0% packet loss
+2026/7/19 23:06:20 command=cat /proc/interrupts
+2026/7/19 23:06:20 output_begin
+cat /proc/interrupts; echo __DONE_IRQ_AFTER__
+           CPU0       
+ 18:         35  LoongArch   2  eth0
+ 19:       3933  LoongArch   3  ttyS0
+ 27:       2083  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_AFTER__
+
+2026/7/19 23:06:20 output_end
+2026/7/19 23:06:20 marker_seen=True
+2026/7/19 23:06:20 expected_seen=True expected=timer
+2026/7/19 23:06:22 command=nscscc-board read
+2026/7/19 23:06:22 output_begin
+nscscc-board read; echo __DONE_BOARD_READ__
+switches=0xf6
+buttons=0x0000
+step_buttons=0x00
+__DONE_BOARD_READ__
+
+2026/7/19 23:06:22 output_end
+2026/7/19 23:06:22 marker_seen=True
+2026/7/19 23:06:22 expected_seen=True expected=switches=
+2026/7/19 23:06:24 command=nscscc-board led 0x0000a55a
+2026/7/19 23:06:24 output_begin
+nscscc-board led 0x0000a55a; echo __DONE_LED__
+__DONE_LED__
+
+2026/7/19 23:06:24 output_end
+2026/7/19 23:06:24 marker_seen=True
+2026/7/19 23:06:25 command=nscscc-board display 0x20260719
+2026/7/19 23:06:25 output_begin
+nscscc-board display 0x20260719; echo __DONE_DISPLAY__
+__DONE_DISPLAY__
+
+2026/7/19 23:06:25 output_end
+2026/7/19 23:06:25 marker_seen=True
+2026/7/19 23:06:28 command=cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confreg/chiplab_confreg/display
+2026/7/19 23:06:28 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confre
+g/chiplab_confreg/display; echo __DONE_CONFREG_OUTPUTS__
+0xa55a
+0x20260719
+__DONE_CONFREG_OUTPUTS__
+
+2026/7/19 23:06:28 output_end
+2026/7/19 23:06:28 marker_seen=True
+2026/7/19 23:06:28 expected_seen=True expected=0x
+2026/7/19 23:06:30 command=dmesg | tail -100
+2026/7/19 23:06:30 output_begin
+dmesg | tail -100; echo __DONE_DMESG__
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 111308K/131072K available (8763K kernel code, 1145K rwdata, 1636K rodata, 4320K init, 496K bss, 19764K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.004000] Console: colour dummy device 80x25
+[    0.004000] Calibrating delay loop (skipped), value calculated using timer frequency.. 400.00 BogoMIPS (lpj=800000)
+[    0.008000] pid_max: default: 32768 minimum: 301
+[    0.008000] LSM: Security Framework initializing
+[    0.008000] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.012000] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.032000] rcu: Hierarchical SRCU implementation.
+[    0.040000] devtmpfs: initialized
+[    0.048000] random: get_random_u32 called from bucket_table_alloc.isra.38+0x68/0x1e0 with crng_init=0
+[    0.052000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.052000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.060000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.284000] raid6: int32x8  gen()    24 MB/s
+[    0.352000] raid6: int32x8  xor()    16 MB/s
+[    0.420000] raid6: int32x4  gen()    28 MB/s
+[    0.488000] raid6: int32x4  xor()    18 MB/s
+[    0.556000] raid6: int32x2  gen()    17 MB/s
+[    0.624000] raid6: int32x2  xor()    12 MB/s
+[    0.692000] raid6: int32x1  gen()    10 MB/s
+[    0.760000] raid6: int32x1  xor()     7 MB/s
+[    0.760000] raid6: using algorithm int32x4 gen() 28 MB/s
+[    0.760000] raid6: .... xor() 18 MB/s, rmw enabled
+[    0.764000] raid6: using intx1 recovery algorithm
+[    0.768000] SCSI subsystem initialized
+[    0.772000] libata version 3.00 loaded.
+[    0.776000] pps_core: LinuxPPS API ver. 1 registered
+[    0.776000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.784000] clocksource: Switched to clocksource Constant
+[    0.792000] FS-Cache: Loaded
+[    0.900000] NET: Registered PF_INET protocol family
+[    0.904000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.912000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.912000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.920000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.920000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.924000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.948000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.016000] random: fast init done
+[    1.084000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.092000] SGI XFS with security attributes, quota, no debug enabled
+[    1.132000] xor: measuring software checksum speed
+[    1.276000]    8regs           :   136 MB/sec
+[    1.436000]    8regs_prefetch  :   123 MB/sec
+[    1.564000]    32regs          :   157 MB/sec
+[    1.708000]    32regs_prefetch :   134 MB/sec
+[    1.708000] xor: using function: 32regs (157 MB/sec)
+[    1.708000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.716000] io scheduler mq-deadline registered
+[    1.716000] io scheduler kyber registered
+[    1.716000] io scheduler bfq registered
+[    1.724000] IPMI message handler: version 39.2
+[    1.732000] ipmi device interface
+[    1.732000] ipmi_si: IPMI System Interface driver
+[    1.740000] ipmi_si: Unable to find any System Interface(s)
+[    1.820000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.888000] printk: console [ttyS0] disabled
+[    1.896000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.896000] printk: console [ttyS0] enabled
+[    1.904000] printk: bootconsole [early0] disabled
+[    1.916000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    2.084000] loop: module loaded
+[    2.092000] ls1a-nand driver initializing
+[    2.092000] ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init
+[    2.132000] libphy: Fixed MDIO Bus: probed
+[    2.132000] tun: Universal TUN/TAP device driver, 1.6
+[    2.144000] mousedev: PS/2 mouse device common for all mice
+[    2.152000] IR MCE Keyboard/mouse protocol handler initialized
+[    2.160000] hid: raw HID events driver (C) Jiri Kosina
+[    2.192000] NET: Registered PF_INET6 protocol family
+[    2.208000] Segment Routing with IPv6
+[    2.208000] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.232000] sctp: Hash tables configured (bind 1024/1024)
+[    2.264000] Btrfs loaded, crc32c=crc32c-generic, zoned=yes
+[    5.624000] Key type encrypted registered
+[    5.800000] Freeing unused kernel image (initmem) memory: 4320K
+[    5.804000] This architecture does not have kernel memory protection.
+[    5.804000] Run /init as init process
+[    5.804000]   with arguments:
+[    5.804000]     /init
+[    5.808000]   with environment:
+[    5.808000]     HOME=/
+[    5.808000]     TERM=linux
+[    9.440000] dev 1:Link OK 4
+[    9.440000]  dmfe: Change Speed to 100Mhz full duplex
+__DONE_DMESG__
+
+2026/7/19 23:06:30 output_end
+2026/7/19 23:06:30 marker_seen=True
+2026/7/19 23:06:30 expected_seen=True expected=ITC MAC
+2026/7/19 23:06:31 command=sync
+2026/7/19 23:06:31 output_begin
+sync; echo __DONE_SYNC__
+__DONE_SYNC__
+
+2026/7/19 23:06:31 output_end
+2026/7/19 23:06:31 marker_seen=True
+2026/7/19 23:06:31 result=success

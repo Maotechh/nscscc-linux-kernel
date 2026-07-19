@@ -1,0 +1,214 @@
+﻿
+/ # set +m; rc=$?; echo __SETM__ rc=$rc
+__SETM__ rc=0
+/ # uname -a; rc=$?; echo __UNAME__ rc=$rc
+Linux nscscc-la32r 5.14.0-rc2-gdb7abacb8820-dirty #1 PREEMPT Sun Jul 19 21:29:12 CST 2026 loongarch32r GNU/Linux
+__UNAME__ rc=0
+/ # cat /proc/interrupts; rc=$?; echo __IRQ_BEFORE__ rc=$rc
+           CPU0       
+ 18:        285  LoongArch   2  eth0
+ 19:       3848  LoongArch   3  ttyS0
+ 27:       2781  LoongArch  11  timer
+ERR:          0
+__IRQ_BEFORE__ rc=0
+/ # cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics
+/tx_packets /sys/class/net/eth0/statistics/rx_bytes /sys/class/net/eth0/statisti
+cs/tx_bytes /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statist
+ics/tx_errors; rc=$?; echo __NET_BEFORE__ rc=$rc
+310
+11
+36871
+1412
+0
+0
+__NET_BEFORE__ rc=0
+/ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __PING_ONE_A__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.337 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.337/2.337/2.337 ms
+__PING_ONE_A__ rc=0
+/ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __PING_ONE_B__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.027 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.027/2.027/2.027 ms
+__PING_ONE_B__ rc=0
+/ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __PING_ONE_C__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.309 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.309/2.309/2.309 ms
+__PING_ONE_C__ rc=0
+/ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __PING_THREE__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.297 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.297/2.297/2.297 ms
+__PING_THREE__ rc=0
+/ # sh -c 'trap "echo ALARM_HANDLED" 14; kill -14 $$; echo AFTER_ALARM'; rc=$?; 
+echo __SIGNAL_IMMEDIATE__ rc=$rc
+Alarm clock
+__SIGNAL_IMMEDIATE__ rc=142
+/ # sh -c 'trap "echo TIMER_SIGNAL_HANDLED" 14; (sleep 1; kill -14 $$) & wait; e
+cho AFTER_TIMER_SIGNAL'; rc=$?; echo __SIGNAL_TIMER__ rc=$rc
+Alarm clock
+__SIGNAL_TIMER__ rc=142
+/ # nscscc-board read; rc=$?; echo __BOARD_READ__ rc=$rc
+switches=0xf6
+buttons=0x0000
+step_buttons=0x00
+__BOARD_READ__ rc=0
+/ # cat /sys/class/chiplab_confreg/chiplab_confreg/device_info; rc=$?; echo __CO
+NFREG_INFO__ rc=$rc
+Chiplab Confreg Device (Loongson)
+Physical base: 0x1fd0e000
+Character device: 249:0
+Platform device: 1fd0e000.confreg
+__CONFREG_INFO__ rc=0
+/ # cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs; rc=$?; echo __C[   57.284000] random: crng init done
+ON
+FREG_INPUTS__ rc=$rc
+switches=0xf6 buttons=0x0000 step=0x00 freq=33000000Hz
+__CONFREG_INPUTS__ rc=0
+/ # nscscc-board led 0x0000a55a; rc=$?; echo __BOARD_LED__ rc=$rc
+__BOARD_LED__ rc=0
+/ # nscscc-board display 0x20260719; rc=$?; echo __BOARD_DISPLAY__ rc=$rc
+__BOARD_DISPLAY__ rc=0
+/ # cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confre
+g/chiplab_confreg/display; rc=$?; echo __CONFREG_OUTPUTS__ rc=$rc
+0xa55a
+0x20260719
+__CONFREG_OUTPUTS__ rc=0
+/ # dd if=/dev/chiplab_confreg bs=4 skip=1024 count=1 2>/dev/null | hexdump -v -
+e '1/4 "%08x\n"'; rc=$?; echo __CONFREG_CHAR_READ__ rc=$rc
+0000a55a
+__CONFREG_CHAR_READ__ rc=0
+/ # cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics
+/tx_packets /sys/class/net/eth0/statistics/rx_bytes /sys/class/net/eth0/statisti
+cs/tx_bytes /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statist
+ics/tx_errors; rc=$?; echo __NET_AFTER__ rc=$rc
+374
+17
+45751
+1888
+0
+0
+__NET_AFTER__ rc=0
+/ # cat /proc/interrupts; rc=$?; echo __IRQ_AFTER__ rc=$rc
+           CPU0       
+ 18:        350  LoongArch   2  eth0
+ 19:      11173  LoongArch   3  ttyS0
+ 27:       3821  LoongArch  11  timer
+ERR:          0
+__IRQ_AFTER__ rc=0
+/ # dmesg | tail -100; rc=$?; echo __DMESG__ rc=$rc
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 111308K/131072K available (8763K kernel code, 1145K rwdata, 1636K rodata, 4320K init, 496K bss, 19764K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu:     RCU event tracing is enabled.
+[    0.000000]  Trampoline variant of Tasks RCU enabled.
+[    0.000000]  Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.004000] Console: colour dummy device 80x25
+[    0.004000] Calibrating delay loop (skipped), value calculated using timer frequency.. 400.00 BogoMIPS (lpj=800000)
+[    0.008000] pid_max: default: 32768 minimum: 301
+[    0.008000] LSM: Security Framework initializing
+[    0.008000] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.012000] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.032000] rcu: Hierarchical SRCU implementation.
+[    0.040000] devtmpfs: initialized
+[    0.048000] random: get_random_u32 called from bucket_table_alloc.isra.38+0x68/0x1e0 with crng_init=0
+[    0.052000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.052000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.060000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.284000] raid6: int32x8  gen()    24 MB/s
+[    0.352000] raid6: int32x8  xor()    16 MB/s
+[    0.420000] raid6: int32x4  gen()    28 MB/s
+[    0.488000] raid6: int32x4  xor()    18 MB/s
+[    0.556000] raid6: int32x2  gen()    17 MB/s
+[    0.624000] raid6: int32x2  xor()    12 MB/s
+[    0.692000] raid6: int32x1  gen()    10 MB/s
+[    0.760000] raid6: int32x1  xor()     7 MB/s
+[    0.760000] raid6: using algorithm int32x4 gen() 28 MB/s
+[    0.760000] raid6: .... xor() 18 MB/s, rmw enabled
+[    0.764000] raid6: using intx1 recovery algorithm
+[    0.768000] SCSI subsystem initialized
+[    0.772000] libata version 3.00 loaded.
+[    0.776000] pps_core: LinuxPPS API ver. 1 registered
+[    0.776000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.784000] clocksource: Switched to clocksource Constant
+[    0.792000] FS-Cache: Loaded
+[    0.900000] NET: Registered PF_INET protocol family
+[    0.904000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.912000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.912000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.920000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.920000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.924000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.948000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.016000] random: fast init done
+[    1.084000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.092000] SGI XFS with security attributes, quota, no debug enabled
+[    1.128000] xor: measuring software checksum speed
+[    1.272000]    8regs           :   136 MB/sec
+[    1.432000]    8regs_prefetch  :   123 MB/sec
+[    1.560000]    32regs          :   157 MB/sec
+[    1.704000]    32regs_prefetch :   134 MB/sec
+[    1.704000] xor: using function: 32regs (157 MB/sec)
+[    1.704000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.712000] io scheduler mq-deadline registered
+[    1.712000] io scheduler kyber registered
+[    1.712000] io scheduler bfq registered
+[    1.720000] IPMI message handler: version 39.2
+[    1.728000] ipmi device interface
+[    1.728000] ipmi_si: IPMI System Interface driver
+[    1.736000] ipmi_si: Unable to find any System Interface(s)
+[    1.820000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.888000] printk: console [ttyS0] disabled
+[    1.896000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.896000] printk: console [ttyS0] enabled
+[    1.904000] printk: bootconsole [early0] disabled
+[    1.920000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    2.084000] loop: module loaded
+[    2.092000] ls1a-nand driver initializing
+[    2.092000] ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init
+[    2.132000] libphy: Fixed MDIO Bus: probed
+[    2.132000] tun: Universal TUN/TAP device driver, 1.6
+[    2.148000] mousedev: PS/2 mouse device common for all mice
+[    2.152000] IR MCE Keyboard/mouse protocol handler initialized
+[    2.160000] hid: raw HID events driver (C) Jiri Kosina
+[    2.184000] NET: Registered PF_INET6 protocol family
+[    2.204000] Segment Routing with IPv6
+[    2.204000] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.220000] sctp: Hash tables configured (bind 1024/1024)
+[    2.256000] Btrfs loaded, crc32c=crc32c-generic, zoned=yes
+[    5.624000] Key type encrypted registered
+[    5.800000] Freeing unused kernel image (initmem) memory: 4320K
+[    5.804000] This architecture does not have kernel memory protection.
+[    5.804000] Run /init as init process
+[    5.804000]   with arguments:
+[    5.804000]     /init
+[    5.808000]   with environment:
+[    5.808000]     HOME=/
+[    5.808000]     TERM=linux
+[    9.440000] dev 1:Link OK 4
+[    9.440000]  dmfe: Change Speed to 100Mhz full duplex
+[   57.284000] random: crng init done
+__DMESG__ rc=0

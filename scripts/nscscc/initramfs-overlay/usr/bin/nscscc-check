@@ -1,0 +1,37 @@
+#!/bin/sh
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+config=/etc/nscscc/network.conf
+SERVER_IP=10.90.50.43
+[ -r "${config}" ] && . "${config}"
+
+echo "=== kernel ==="
+uname -a
+
+echo "=== memory ==="
+grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo
+
+echo "=== filesystems ==="
+mount
+
+echo "=== network ==="
+ip addr show
+if [ -r /sys/class/net/eth0/carrier ]; then
+	echo "eth0 carrier: $(cat /sys/class/net/eth0/carrier)"
+fi
+for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do
+	path="/sys/class/net/eth0/statistics/${statistic}"
+	[ -r "${path}" ] && echo "eth0 ${statistic}: $(cat "${path}")"
+done
+
+echo "=== interrupts before ping ==="
+cat /proc/interrupts
+
+echo "=== ping ${SERVER_IP} ==="
+ping -c 3 -W 2 "${SERVER_IP}" || true
+
+echo "=== interrupts after ping ==="
+cat /proc/interrupts
+
+echo "=== recent kernel messages ==="
+dmesg | tail -80

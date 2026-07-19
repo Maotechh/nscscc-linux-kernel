@@ -72,6 +72,23 @@
 			phy_addr = <0xffffffff>;
 			dma-mask = <0xffffffff 0xffffffff>;
 		};
+
+		confreg: confreg@1fd0e000 {
+			compatible = "loongson,chiplab_confreg";
+			reg = <0x1fd0e000 0x2000>;
+		};
+
+		ps2: ps2@1fe04000 {
+			compatible = "altr,ps2-1.0";
+			reg = <0x1fe04000 0x8>;
+			interrupt-parent = <&cpuic>;
+			interrupts = <7>;
+		};
+
+		lcd: lcd@1fe08000 {
+			compatible = "lcd,nt35510";
+			reg = <0x1fe08000 0x8>;
+		};
 #if 0
 		ahci@0x1fe30000 {
 			compatible = "snps,spear-ahci";
@@ -105,4 +122,3 @@
 #endif
 	};
 };
-

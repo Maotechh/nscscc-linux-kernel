@@ -1,0 +1,910 @@
+diff --git a/IP/APB_DEV/apb_dev_top_with_nand.v b/IP/APB_DEV/apb_dev_top_with_nand.v
+index 213f014..865c619 100644
+--- a/IP/APB_DEV/apb_dev_top_with_nand.v
++++ b/IP/APB_DEV/apb_dev_top_with_nand.v
+@@ -103,6 +103,23 @@ uart0_ri_i,
+ 
+ uart0_int,
+ nand_int,
++ps2_int,
++
++ps2_clk_i,
++ps2_clk_o,
++ps2_clk_t,
++ps2_dat_i,
++ps2_dat_o,
++ps2_dat_t,
++
++lcd_nrst,
++lcd_csel,
++lcd_rd,
++lcd_rs,
++lcd_wr,
++lcd_data_i,
++lcd_data_o,
++lcd_data_t,
+ 
+ nand_type,
+ nand_cle   ,
+@@ -201,6 +218,23 @@ output  [7:0]nand_dat_o ;
+ 
+ output uart0_int;
+ output nand_int;
++output ps2_int;
++
++input  ps2_clk_i;
++output ps2_clk_o;
++output ps2_clk_t;
++input  ps2_dat_i;
++output ps2_dat_o;
++output ps2_dat_t;
++
++output        lcd_nrst;
++output        lcd_csel;
++output        lcd_rd;
++output        lcd_rs;
++output        lcd_wr;
++input  [15:0] lcd_data_i;
++output [15:0] lcd_data_o;
++output [15:0] lcd_data_t;
+ input  [1:0]nand_type;
+ 
+ wire nand_dma_req_o;
+@@ -248,6 +282,24 @@ wire  [ADDR_APB -1:0] apb_nand_addr;
+ wire  [31:0]        apb_nand_datai; 
+ wire  [31:0]        apb_nand_datao; 
+ 
++wire                apb_ps2_req;
++wire                apb_ps2_ack;
++wire                apb_ps2_rw;
++wire                apb_ps2_enab;
++wire                apb_ps2_psel;
++wire  [ADDR_APB-1:0] apb_ps2_addr;
++wire  [31:0]        apb_ps2_datai;
++wire  [31:0]        apb_ps2_datao;
++
++wire                apb_lcd_req;
++wire                apb_lcd_ack;
++wire                apb_lcd_rw;
++wire                apb_lcd_enab;
++wire                apb_lcd_psel;
++wire  [ADDR_APB-1:0] apb_lcd_addr;
++wire  [31:0]        apb_lcd_datai;
++wire  [31:0]        apb_lcd_datao;
++
+ axi2apb_bridge AA_axi2apb_bridge_cpu 
+ (
+ .clk                (clk                ),
+@@ -348,7 +400,25 @@ apb_mux2 AA_apb_mux16
+ .apb1_psel          (apb_nand_psel      ),
+ .apb1_addr          (apb_nand_addr      ),
+ .apb1_datai         (apb_nand_datai     ),
+-.apb1_datao         (apb_nand_datao     )
++.apb1_datao         (apb_nand_datao     ),
++
++.apb2_req           (apb_ps2_req        ),
++.apb2_ack           (apb_ps2_ack        ),
++.apb2_rw            (apb_ps2_rw         ),
++.apb2_enab          (apb_ps2_enab       ),
++.apb2_psel          (apb_ps2_psel       ),
++.apb2_addr          (apb_ps2_addr       ),
++.apb2_datai         (apb_ps2_datai      ),
++.apb2_datao         (apb_ps2_datao      ),
++
++.apb3_req           (apb_lcd_req        ),
++.apb3_ack           (apb_lcd_ack        ),
++.apb3_rw            (apb_lcd_rw         ),
++.apb3_enab          (apb_lcd_enab       ),
++.apb3_psel          (apb_lcd_psel       ),
++.apb3_addr          (apb_lcd_addr       ),
++.apb3_datai         (apb_lcd_datai      ),
++.apb3_datao         (apb_lcd_datao      )
+                                         
+ );
+ 
+@@ -380,6 +450,47 @@ UART_TOP uart0
+ .RI                (uart0_ri_i        )
+ );
+ 
++chiplab_ps2_rx ps2_controller
++(
++.clk               (clk                 ),
++.reset_n           (rst_n               ),
++.apb_addr          (apb_ps2_addr        ),
++.apb_psel          (apb_ps2_psel        ),
++.apb_penable       (apb_ps2_enab        ),
++.apb_pwrite        (apb_ps2_rw          ),
++.apb_pwdata        (apb_ps2_datai       ),
++.apb_prdata        (apb_ps2_datao       ),
++.apb_pready        (apb_ps2_ack         ),
++.ps2_clk_i         (ps2_clk_i           ),
++.ps2_clk_o         (ps2_clk_o           ),
++.ps2_clk_t         (ps2_clk_t           ),
++.ps2_dat_i         (ps2_dat_i           ),
++.ps2_dat_o         (ps2_dat_o           ),
++.ps2_dat_t         (ps2_dat_t           ),
++.irq               (ps2_int             )
++);
++
++nt35510_apb_adapter lcd_controller
++(
++.reset_n           (rst_n               ),
++.clk               (clk                 ),
++.apb_addr          (apb_lcd_addr        ),
++.apb_psel          (apb_lcd_psel        ),
++.apb_penable       (apb_lcd_enab        ),
++.apb_pwrite        (apb_lcd_rw          ),
++.apb_pwdata        (apb_lcd_datai       ),
++.apb_pready        (apb_lcd_ack         ),
++.apb_prdata        (apb_lcd_datao       ),
++.lcd_nrst          (lcd_nrst            ),
++.lcd_csel          (lcd_csel            ),
++.lcd_rs            (lcd_rs              ),
++.lcd_wr            (lcd_wr              ),
++.lcd_rd            (lcd_rd              ),
++.lcd_data_in       (lcd_data_i          ),
++.lcd_data_out      (lcd_data_o          ),
++.lcd_data_t        (lcd_data_t          )
++);
++
+ //NAND
+ nand_module nand_module 
+ (
+@@ -413,4 +524,3 @@ nand_module nand_module
+ 
+ endmodule
+ 
+-
+diff --git a/IP/APB_DEV/apb_mux2.v b/IP/APB_DEV/apb_mux2.v
+index 7f96ac3..e10d0fc 100644
+--- a/IP/APB_DEV/apb_mux2.v
++++ b/IP/APB_DEV/apb_mux2.v
+@@ -34,6 +34,8 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ `define APB_DEV0  6'h00 
+ 
+ `define APB_DEV1  6'h1e
++`define APB_DEV2  6'h01
++`define APB_DEV3  6'h02
+ 
+ module apb_mux2 (
+ clk,
+@@ -76,7 +78,25 @@ apb1_psel,
+ apb1_enab,
+ apb1_addr,
+ apb1_datai,
+-apb1_datao
++apb1_datao,
++
++apb2_req,
++apb2_ack,
++apb2_rw,
++apb2_psel,
++apb2_enab,
++apb2_addr,
++apb2_datai,
++apb2_datao,
++
++apb3_req,
++apb3_ack,
++apb3_rw,
++apb3_psel,
++apb3_enab,
++apb3_addr,
++apb3_datai,
++apb3_datao
+ );
+ 
+ parameter ADDR_APB = 20,
+@@ -123,6 +143,24 @@ output[ADDR_APB-1:0]    apb1_addr;
+ output[31:0]            apb1_datai;
+ input [31:0]            apb1_datao;
+ 
++output                  apb2_req;
++input                   apb2_ack;
++output                  apb2_rw;
++output                  apb2_psel;
++output                  apb2_enab;
++output[ADDR_APB-1:0]    apb2_addr;
++output[31:0]            apb2_datai;
++input [31:0]            apb2_datao;
++
++output                  apb3_req;
++input                   apb3_ack;
++output                  apb3_rw;
++output                  apb3_psel;
++output                  apb3_enab;
++output[ADDR_APB-1:0]    apb3_addr;
++output[31:0]            apb3_datai;
++input [31:0]            apb3_datao;
++
+ wire                    apb_ack; 
+ wire                    apb_rw;
+ wire                    apb_psel;
+@@ -142,9 +180,12 @@ assign apb_psel         = dma_grant ? apb_psel_dma:apb_psel_cpu;
+ assign apb_enab         = dma_grant ? apb_enab_dma:apb_enab_cpu; 
+ assign apb_datai        = dma_grant ? apb_wdata_dma[7:0]:apb_datai_cpu; 
+ assign high_24b_wr      = dma_grant ? apb_wdata_dma[31:8]:apb_high_24b_wr;  
+-assign high_24b_rd      = apb1_req  ? apb1_datao[31:8] :  24'h0;
++assign high_24b_rd      = apb1_req ? apb1_datao[31:8] :
++                          apb2_req ? apb2_datao[31:8] :
++                          apb3_req ? apb3_datao[31:8] : 24'h0;
+ 
+-assign apb_word_trans_cpu = dma_grant  ? 1'h0: apb1_req;
++assign apb_word_trans_cpu = dma_grant ? 1'h0 :
++                            (apb1_req | apb2_req | apb3_req);
+ 
+ assign apb_high_24b_rd    = dma_grant  ? 24'h0: high_24b_rd;
+ assign apb_datao_cpu      = dma_grant  ? 8'h0:  apb_datao;
+@@ -153,21 +194,30 @@ assign apb_ack_cpu        = ~dma_grant & apb_ack;
+ assign apb_ready_dma      = dma_grant  & apb_ack;
+ 
+ assign apb0_req = (apb_addr[ADDR_APB-1:14] ==`APB_DEV0);
+-//assign apb1_req = (apb_addr[ADDR_APB-1:14] ==`APB_DEV1);
+-assign apb1_req = !apb0_req;
++assign apb1_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV1);
++assign apb2_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV2);
++assign apb3_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV3);
+ 
+ assign apb0_psel = apb_psel && apb0_req ;
+ assign apb1_psel = apb_psel && apb1_req;
++assign apb2_psel = apb_psel && apb2_req;
++assign apb3_psel = apb_psel && apb3_req;
+ 
+ assign apb0_enab = apb_enab && apb0_req ;
+ assign apb1_enab = apb_enab && apb1_req;
++assign apb2_enab = apb_enab && apb2_req;
++assign apb3_enab = apb_enab && apb3_req;
+ 
+ assign apb_ack = apb0_req ? apb0_ack : 
+                  apb1_req ? apb1_ack : 
++                 apb2_req ? apb2_ack :
++                 apb3_req ? apb3_ack :
+                  1'b0;
+ 
+ assign apb_datao = apb0_req ? apb0_datao : 
+                    apb1_req ? apb1_datao[7:0] : 
++                   apb2_req ? apb2_datao[7:0] :
++                   apb3_req ? apb3_datao[7:0] :
+                    8'b0;
+ 
+ 
+@@ -180,6 +230,14 @@ assign apb1_addr  = apb_addr;
+ assign apb1_datai = {high_24b_wr,apb_datai};
+ assign apb1_rw    = apb_rw;
+ 
++assign apb2_addr  = apb_addr;
++assign apb2_datai = {high_24b_wr,apb_datai};
++assign apb2_rw    = apb_rw;
++
++assign apb3_addr  = apb_addr;
++assign apb3_datai = {high_24b_wr,apb_datai};
++assign apb3_rw    = apb_rw;
++
+ endmodule
+ 
+ module arb_2_1( clk, rst_n,  valid0, valid1, dma_grant);
+diff --git a/IP/APB_DEV/chiplab_ps2_rx.v b/IP/APB_DEV/chiplab_ps2_rx.v
+new file mode 100644
+index 0000000..85a2d07
+--- /dev/null
++++ b/IP/APB_DEV/chiplab_ps2_rx.v
+@@ -0,0 +1,321 @@
++/*
++ * PS/2 host controller for the Chiplab experiment box.
++ *
++ * The two-register interface matches the Linux altera_ps2 driver. Reads from
++ * offset 0 return FIFO status and one received byte, writes to offset 0 send a
++ * host-to-device command, and bit 0 at offset 4 enables the receive interrupt.
++ * The transmit timing follows the PS/2 host protocol at a 100 MHz APB clock.
++ */
++module chiplab_ps2_rx (
++    input  wire        clk,
++    input  wire        reset_n,
++
++    input  wire [19:0] apb_addr,
++    input  wire        apb_psel,
++    input  wire        apb_penable,
++    input  wire        apb_pwrite,
++    input  wire [31:0] apb_pwdata,
++    output wire [31:0] apb_prdata,
++    output wire        apb_pready,
++
++    input  wire        ps2_clk_i,
++    output wire        ps2_clk_o,
++    output wire        ps2_clk_t,
++    input  wire        ps2_dat_i,
++    output wire        ps2_dat_o,
++    output wire        ps2_dat_t,
++    output wire        irq
++);
++
++    localparam [3:0] TX_IDLE       = 4'd0;
++    localparam [3:0] TX_INHIBIT    = 4'd1;
++    localparam [3:0] TX_START_HOLD = 4'd2;
++    localparam [3:0] TX_WAIT_CLOCK = 4'd3;
++    localparam [3:0] TX_DATA       = 4'd4;
++    localparam [3:0] TX_STOP       = 4'd5;
++    localparam [3:0] TX_ACK        = 4'd6;
++    localparam [3:0] TX_DONE       = 4'd7;
++
++    localparam [20:0] INHIBIT_LIMIT = 21'd10099;
++    localparam [20:0] START_HOLD_LIMIT = 21'd499;
++    localparam [20:0] WAIT_TIMEOUT_LIMIT = 21'd1499999;
++    localparam [20:0] TRANSFER_TIMEOUT_LIMIT = 21'd199999;
++
++    reg ps2_clk_meta;
++    reg ps2_clk_sync;
++    reg ps2_clk_last;
++    reg ps2_dat_meta;
++    reg ps2_dat_sync;
++
++    reg [7:0] fifo_mem [0:15];
++    reg [3:0] fifo_rd_ptr;
++    reg [3:0] fifo_wr_ptr;
++    reg [4:0] fifo_count;
++    reg irq_enable;
++    reg command_error;
++
++    reg command_active;
++    reg [7:0] command_data;
++    reg [3:0] tx_state;
++    reg [20:0] tx_count;
++    reg [7:0] tx_idle_count;
++    reg [3:0] tx_bit;
++    reg [8:0] tx_frame;
++    reg tx_done;
++    reg tx_failed;
++
++    reg rx_active;
++    reg [3:0] rx_bit;
++    reg [7:0] rx_shift;
++    reg rx_parity;
++    reg rx_parity_bit;
++    reg [7:0] rx_data;
++    reg rx_valid;
++
++    wire ps2_clk_fall = ps2_clk_last && !ps2_clk_sync;
++    wire ps2_clk_rise = !ps2_clk_last && ps2_clk_sync;
++    wire apb_access = apb_psel && apb_penable;
++    wire data_read = apb_access && !apb_pwrite && !apb_addr[2];
++    wire data_write = apb_access && apb_pwrite && !apb_addr[2];
++    wire control_write = apb_access && apb_pwrite && apb_addr[2];
++    wire fifo_empty = (fifo_count == 0);
++    wire fifo_full = (fifo_count == 5'd16);
++    wire fifo_push = rx_valid && !fifo_full;
++    wire fifo_pop = data_read && !fifo_empty;
++    wire command_complete = tx_done || tx_failed;
++
++    assign apb_pready = apb_access &&
++        (!data_write || (command_active && command_complete));
++    assign apb_prdata = apb_addr[2]
++        ? {21'b0, command_error, 1'b0, irq, 7'b0, irq_enable}
++        : {11'b0, fifo_count, !fifo_empty, 7'b0,
++           fifo_empty ? 8'b0 : fifo_mem[fifo_rd_ptr]};
++    assign irq = irq_enable && !fifo_empty;
++
++    // PS/2 uses open-drain signaling. A low T drives zero; a high T releases.
++    assign ps2_clk_o = 1'b0;
++    assign ps2_clk_t = (tx_state == TX_INHIBIT ||
++                        tx_state == TX_START_HOLD) ? 1'b0 : 1'b1;
++    assign ps2_dat_o = 1'b0;
++    assign ps2_dat_t =
++        (tx_state == TX_START_HOLD || tx_state == TX_WAIT_CLOCK) ? 1'b0 :
++        (tx_state == TX_DATA) ? tx_frame[tx_bit] : 1'b1;
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            ps2_clk_meta <= 1'b1;
++            ps2_clk_sync <= 1'b1;
++            ps2_clk_last <= 1'b1;
++            ps2_dat_meta <= 1'b1;
++            ps2_dat_sync <= 1'b1;
++        end else begin
++            ps2_clk_meta <= ps2_clk_i;
++            ps2_clk_sync <= ps2_clk_meta;
++            ps2_clk_last <= ps2_clk_sync;
++            ps2_dat_meta <= ps2_dat_i;
++            ps2_dat_sync <= ps2_dat_meta;
++        end
++    end
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            command_active <= 1'b0;
++            command_data <= 8'b0;
++            irq_enable <= 1'b0;
++            command_error <= 1'b0;
++        end else begin
++            if (data_write && !command_active) begin
++                command_active <= 1'b1;
++                command_data <= apb_pwdata[7:0];
++            end else if (command_active && command_complete) begin
++                command_active <= 1'b0;
++            end
++
++            if (control_write) begin
++                irq_enable <= apb_pwdata[0];
++                if (apb_pwdata[10])
++                    command_error <= 1'b0;
++            end
++            if (tx_failed)
++                command_error <= 1'b1;
++        end
++    end
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            tx_state <= TX_IDLE;
++            tx_count <= 21'b0;
++            tx_idle_count <= 8'b0;
++            tx_bit <= 4'b0;
++            tx_frame <= 9'b0;
++            tx_done <= 1'b0;
++            tx_failed <= 1'b0;
++        end else begin
++            tx_done <= 1'b0;
++            tx_failed <= 1'b0;
++
++            case (tx_state)
++                TX_IDLE: begin
++                    tx_count <= 21'b0;
++                    tx_bit <= 4'b0;
++                    if (!command_active) begin
++                        tx_idle_count <= 8'b0;
++                    end else if (!rx_active && ps2_clk_sync && ps2_dat_sync) begin
++                        if (tx_idle_count == 8'hff) begin
++                            tx_frame <= {~^command_data, command_data};
++                            tx_idle_count <= 8'b0;
++                            tx_state <= TX_INHIBIT;
++                        end else begin
++                            tx_idle_count <= tx_idle_count + 1'b1;
++                        end
++                    end else begin
++                        tx_idle_count <= 8'b0;
++                    end
++                end
++
++                TX_INHIBIT: begin
++                    if (tx_count == INHIBIT_LIMIT) begin
++                        tx_count <= 21'b0;
++                        tx_state <= TX_START_HOLD;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_START_HOLD: begin
++                    if (tx_count == START_HOLD_LIMIT) begin
++                        tx_count <= 21'b0;
++                        tx_state <= TX_WAIT_CLOCK;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_WAIT_CLOCK: begin
++                    if (ps2_clk_fall) begin
++                        tx_count <= 21'b0;
++                        tx_bit <= 4'b0;
++                        tx_state <= TX_DATA;
++                    end else if (tx_count == WAIT_TIMEOUT_LIMIT) begin
++                        tx_failed <= 1'b1;
++                        tx_state <= TX_DONE;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_DATA: begin
++                    if (ps2_clk_fall) begin
++                        tx_count <= 21'b0;
++                        if (tx_bit == 4'd8)
++                            tx_state <= TX_STOP;
++                        else
++                            tx_bit <= tx_bit + 1'b1;
++                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
++                        tx_failed <= 1'b1;
++                        tx_state <= TX_DONE;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_STOP: begin
++                    if (ps2_clk_fall) begin
++                        tx_count <= 21'b0;
++                        tx_state <= TX_ACK;
++                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
++                        tx_failed <= 1'b1;
++                        tx_state <= TX_DONE;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_ACK: begin
++                    if (ps2_clk_rise) begin
++                        if (!ps2_dat_sync)
++                            tx_done <= 1'b1;
++                        else
++                            tx_failed <= 1'b1;
++                        tx_state <= TX_DONE;
++                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
++                        tx_failed <= 1'b1;
++                        tx_state <= TX_DONE;
++                    end else begin
++                        tx_count <= tx_count + 1'b1;
++                    end
++                end
++
++                TX_DONE: begin
++                    tx_count <= 21'b0;
++                    if (!command_active)
++                        tx_state <= TX_IDLE;
++                end
++
++                default: tx_state <= TX_IDLE;
++            endcase
++        end
++    end
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            rx_active <= 1'b0;
++            rx_bit <= 4'b0;
++            rx_shift <= 8'b0;
++            rx_parity <= 1'b0;
++            rx_parity_bit <= 1'b0;
++            rx_data <= 8'b0;
++            rx_valid <= 1'b0;
++        end else begin
++            rx_valid <= 1'b0;
++            if (tx_state != TX_IDLE) begin
++                rx_active <= 1'b0;
++                rx_bit <= 4'b0;
++            end else if (ps2_clk_fall) begin
++                if (!rx_active) begin
++                    if (!ps2_dat_sync) begin
++                        rx_active <= 1'b1;
++                        rx_bit <= 4'b0;
++                        rx_parity <= 1'b0;
++                    end
++                end else if (rx_bit < 4'd8) begin
++                    rx_shift[rx_bit[2:0]] <= ps2_dat_sync;
++                    rx_parity <= rx_parity ^ ps2_dat_sync;
++                    rx_bit <= rx_bit + 1'b1;
++                end else if (rx_bit == 4'd8) begin
++                    rx_parity_bit <= ps2_dat_sync;
++                    rx_bit <= rx_bit + 1'b1;
++                end else begin
++                    rx_active <= 1'b0;
++                    rx_bit <= 4'b0;
++                    if (ps2_dat_sync && (rx_parity ^ rx_parity_bit)) begin
++                        rx_data <= rx_shift;
++                        rx_valid <= 1'b1;
++                    end
++                end
++            end
++        end
++    end
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            fifo_rd_ptr <= 4'b0;
++            fifo_wr_ptr <= 4'b0;
++            fifo_count <= 5'b0;
++        end else begin
++            if (fifo_push) begin
++                fifo_mem[fifo_wr_ptr] <= rx_data;
++                fifo_wr_ptr <= fifo_wr_ptr + 1'b1;
++            end
++            if (fifo_pop)
++                fifo_rd_ptr <= fifo_rd_ptr + 1'b1;
++
++            case ({fifo_push, fifo_pop})
++                2'b10: fifo_count <= fifo_count + 1'b1;
++                2'b01: fifo_count <= fifo_count - 1'b1;
++                default: ;
++            endcase
++        end
++    end
++
++endmodule
+diff --git a/IP/APB_DEV/nt35510_apb_adapter.v b/IP/APB_DEV/nt35510_apb_adapter.v
+new file mode 100644
+index 0000000..010d650
+--- /dev/null
++++ b/IP/APB_DEV/nt35510_apb_adapter.v
+@@ -0,0 +1,119 @@
++/*
++ * APB adapter for the NT35510 parallel LCD interface.
++ *
++ * Register offset 0 is the instruction port and offset 4 is the data port.
++ * The controller stretches APB accesses to satisfy the LCD read/write timing.
++ * This implementation is derived from the controller used by
++ * trivialmips/nontrivial-mips and keeps its externally verified timing values.
++ */
++module nt35510_apb_adapter (
++    input  wire        reset_n,
++    input  wire        clk,
++
++    input  wire [19:0] apb_addr,
++    input  wire        apb_psel,
++    input  wire        apb_penable,
++    input  wire        apb_pwrite,
++    input  wire [31:0] apb_pwdata,
++    output wire        apb_pready,
++    output reg  [31:0] apb_prdata,
++
++    output wire        lcd_nrst,
++    output reg         lcd_csel,
++    output reg         lcd_rs,
++    output reg         lcd_wr,
++    output reg         lcd_rd,
++    input  wire [15:0] lcd_data_in,
++    output reg  [15:0] lcd_data_out,
++    output reg  [15:0] lcd_data_t
++);
++
++    localparam [2:0] STATE_SETUP    = 3'd0;
++    localparam [2:0] STATE_SETUP_RS = 3'd1;
++    localparam [2:0] STATE_ACCESS   = 3'd2;
++    localparam [2:0] STATE_READY    = 3'd3;
++    localparam [2:0] STATE_STALL    = 3'd4;
++
++    localparam integer LCD_RD_CYCLES = 50;
++    localparam integer LCD_WR_CYCLES = 5;
++    localparam integer LCD_RS_CYCLES = 3;
++
++    reg [2:0] state;
++    reg [8:0] cycle_count;
++    reg [8:0] target_count;
++
++    assign lcd_nrst = reset_n;
++    assign apb_pready = (state == STATE_READY);
++
++    always @(posedge clk or negedge reset_n) begin
++        if (!reset_n) begin
++            state <= STATE_SETUP;
++            cycle_count <= 9'b0;
++            target_count <= 9'b0;
++            apb_prdata <= 32'b0;
++            lcd_csel <= 1'b1;
++            lcd_wr <= 1'b1;
++            lcd_rs <= 1'b0;
++            lcd_rd <= 1'b1;
++            lcd_data_out <= 16'b0;
++            lcd_data_t <= 16'hffff;
++        end else begin
++            case (state)
++                STATE_SETUP: begin
++                    if (apb_psel && apb_penable) begin
++                        lcd_rs <= apb_addr[2];
++                        state <= STATE_SETUP_RS;
++                        cycle_count <= 9'b0;
++                    end
++                end
++
++                STATE_SETUP_RS: begin
++                    cycle_count <= cycle_count + 1'b1;
++                    if (cycle_count == 9'd2) begin
++                        cycle_count <= 9'b0;
++                        lcd_csel <= 1'b0;
++                        if (apb_pwrite) begin
++                            lcd_data_t <= 16'h0000;
++                            lcd_data_out <= apb_pwdata[15:0];
++                            lcd_wr <= 1'b0;
++                            target_count <= 9'd5;
++                        end else begin
++                            lcd_rd <= 1'b0;
++                            target_count <= 9'd50;
++                        end
++                        state <= STATE_ACCESS;
++                    end
++                end
++
++                STATE_ACCESS: begin
++                    cycle_count <= cycle_count + 1'b1;
++                    if (cycle_count == target_count - 1'b1) begin
++                        if (!apb_pwrite)
++                            apb_prdata <= {16'b0, lcd_data_in};
++                        lcd_wr <= 1'b1;
++                        lcd_rd <= 1'b1;
++                        state <= STATE_READY;
++                    end
++                end
++
++                STATE_READY: begin
++                    if (!(apb_psel && apb_penable)) begin
++                        cycle_count <= 9'b0;
++                        state <= STATE_STALL;
++                    end
++                end
++
++                STATE_STALL: begin
++                    cycle_count <= cycle_count + 1'b1;
++                    if (cycle_count == target_count - 1'b1) begin
++                        state <= STATE_SETUP;
++                        lcd_csel <= 1'b1;
++                        lcd_data_t <= 16'hffff;
++                    end
++                end
++
++                default: state <= STATE_SETUP;
++            endcase
++        end
++    end
++endmodule
+diff --git a/chip/soc_demo/loongson/soc_top.v b/chip/soc_demo/loongson/soc_top.v
+index 52f1d37..220d4ef 100644
+--- a/chip/soc_demo/loongson/soc_top.v
++++ b/chip/soc_demo/loongson/soc_top.v
+@@ -111,7 +111,20 @@ module soc_top(
+     output        SPI_CLK,
+     output        SPI_CS,
+     inout         SPI_MISO,
+-    inout         SPI_MOSI
++    inout         SPI_MOSI,
++
++    //------PS/2-------
++    inout         PS2_clk,
++    inout         PS2_dat,
++
++    //------NT35510 LCD-------
++    inout  [15:0] LCD_data,
++    output        LCD_nrst,
++    output        LCD_csel,
++    output        LCD_rd,
++    output        LCD_rs,
++    output        LCD_wr,
++    output        LCD_lighton
+ );
+ wire        aclk;
+ wire        aresetn;
+@@ -524,6 +537,35 @@ assign     SPI_MISO = spi_sdi_en ? 1'bz : spi_sdi_o ;
+ assign     spi_sdo_i = SPI_MOSI;
+ assign     spi_sdi_i = SPI_MISO;
+ 
++//ps2
++wire ps2_clk_i;
++wire ps2_clk_o;
++wire ps2_clk_t;
++wire ps2_dat_i;
++wire ps2_dat_o;
++wire ps2_dat_t;
++wire ps2_int;
++IOBUF ps2_clk_iobuf(
++    .IO(PS2_clk), .I(ps2_clk_o), .T(ps2_clk_t), .O(ps2_clk_i));
++IOBUF ps2_dat_iobuf(
++    .IO(PS2_dat), .I(ps2_dat_o), .T(ps2_dat_t), .O(ps2_dat_i));
++
++//nt35510 lcd
++wire [15:0] lcd_data_i;
++wire [15:0] lcd_data_o;
++wire [15:0] lcd_data_t;
++assign LCD_lighton = 1'b1;
++generate
++    genvar lcd_i;
++    for (lcd_i = 0; lcd_i < 16; lcd_i = lcd_i + 1) begin: lcd_data_loop
++        IOBUF lcd_data_iobuf(
++            .IO(LCD_data[lcd_i]),
++            .I(lcd_data_o[lcd_i]),
++            .T(lcd_data_t[lcd_i]),
++            .O(lcd_data_i[lcd_i]));
++    end
++endgenerate
++
+ // confreg 
+ wire   [31:0] cr00,cr01,cr02,cr03,cr04,cr05,cr06,cr07;
+ 
+@@ -594,7 +636,7 @@ assign     uart0_ri_i  = UART_RI ;
+ wire mac_int;
+ wire [5:0] int_out;
+ wire [5:0] int_n_i;
+-assign int_out = {1'b0,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
++assign int_out = {ps2_int,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
+ assign int_n_i = ~int_out;
+ 
+ reg cpu_aresetn_1;
+@@ -722,7 +764,7 @@ debug_sram u_debug_sram(
+ // cpu
+ core_top cpu_mid(
+   .aclk             (cpu_clk),
+-  .intrpt           ({3'b0, int_out[4:0]}),  //232 only 5bit
++  .intrpt           ({2'b0, int_out[5:0]}),
+   //.nmi              (1'b1),
+ 
+   .aresetn          (cpu_aresetn  ),
+@@ -1867,6 +1909,25 @@ axi2apb_misc APB_DEV
+ .uart0_ri_i         (uart0_ri_i       ),
+ .uart0_int          (uart0_int        ),
+ 
++//PS/2
++.ps2_int            (ps2_int          ),
++.ps2_clk_i          (ps2_clk_i        ),
++.ps2_clk_o          (ps2_clk_o        ),
++.ps2_clk_t          (ps2_clk_t        ),
++.ps2_dat_i          (ps2_dat_i        ),
++.ps2_dat_o          (ps2_dat_o        ),
++.ps2_dat_t          (ps2_dat_t        ),
++
++//NT35510 LCD
++.lcd_nrst           (LCD_nrst         ),
++.lcd_csel           (LCD_csel         ),
++.lcd_rd             (LCD_rd           ),
++.lcd_rs             (LCD_rs           ),
++.lcd_wr             (LCD_wr           ),
++.lcd_data_i         (lcd_data_i       ),
++.lcd_data_o         (lcd_data_o       ),
++.lcd_data_t         (lcd_data_t       ),
++
+ .nand_type          (2'h2             ),  //1Gbit
+ .nand_cle           (nand_cle         ),
+ .nand_ale           (nand_ale         ),
+@@ -1881,4 +1942,3 @@ axi2apb_misc APB_DEV
+ .nand_int           (nand_int         )
+ );
+ endmodule
+-
+diff --git a/fpga/loongson/soc_up.xdc b/fpga/loongson/soc_up.xdc
+index df85795..68387dc 100644
+--- a/fpga/loongson/soc_up.xdc
++++ b/fpga/loongson/soc_up.xdc
+@@ -105,8 +105,47 @@ set_property PACKAGE_PIN AE26 [get_ports phy_rstn]
+ #uart
+ set_property PACKAGE_PIN F23 [get_ports UART_RX]
+ set_property IOSTANDARD LVCMOS33 [get_ports UART_RX]
+-set_property PACKAGE_PIN H19 [get_ports UART_TX]
+-set_property IOSTANDARD LVCMOS33 [get_ports UART_TX]
++set_property PACKAGE_PIN H19 [get_ports UART_TX]
++set_property IOSTANDARD LVCMOS33 [get_ports UART_TX]
++
++# PS/2
++set_property PACKAGE_PIN Y2  [get_ports PS2_clk]
++set_property PACKAGE_PIN AD1 [get_ports PS2_dat]
++set_property IOSTANDARD LVCMOS33 [get_ports PS2_clk]
++set_property IOSTANDARD LVCMOS33 [get_ports PS2_dat]
++set_property PULLUP true [get_ports PS2_clk]
++set_property PULLUP true [get_ports PS2_dat]
++
++# NT35510 LCD
++set_property PACKAGE_PIN H9  [get_ports {LCD_data[0]}]
++set_property PACKAGE_PIN K17 [get_ports {LCD_data[1]}]
++set_property PACKAGE_PIN J20 [get_ports {LCD_data[2]}]
++set_property PACKAGE_PIN M17 [get_ports {LCD_data[3]}]
++set_property PACKAGE_PIN L17 [get_ports {LCD_data[4]}]
++set_property PACKAGE_PIN L18 [get_ports {LCD_data[5]}]
++set_property PACKAGE_PIN L15 [get_ports {LCD_data[6]}]
++set_property PACKAGE_PIN M15 [get_ports {LCD_data[7]}]
++set_property PACKAGE_PIN M16 [get_ports {LCD_data[8]}]
++set_property PACKAGE_PIN L14 [get_ports {LCD_data[9]}]
++set_property PACKAGE_PIN M14 [get_ports {LCD_data[10]}]
++set_property PACKAGE_PIN F22 [get_ports {LCD_data[11]}]
++set_property PACKAGE_PIN G22 [get_ports {LCD_data[12]}]
++set_property PACKAGE_PIN G21 [get_ports {LCD_data[13]}]
++set_property PACKAGE_PIN H24 [get_ports {LCD_data[14]}]
++set_property PACKAGE_PIN J16 [get_ports {LCD_data[15]}]
++set_property PACKAGE_PIN J25 [get_ports LCD_nrst]
++set_property PACKAGE_PIN G24 [get_ports LCD_csel]
++set_property PACKAGE_PIN K8  [get_ports LCD_rd]
++set_property PACKAGE_PIN K16 [get_ports LCD_rs]
++set_property PACKAGE_PIN L8  [get_ports LCD_wr]
++set_property PACKAGE_PIN J15 [get_ports LCD_lighton]
++set_property IOSTANDARD LVCMOS33 [get_ports {LCD_data[*]}]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_nrst]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_csel]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_rd]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_rs]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_wr]
++set_property IOSTANDARD LVCMOS33 [get_ports LCD_lighton]
+ 
+ #debug uart
+ set_property PACKAGE_PIN M25 [get_ports UART_RX2]
+@@ -189,7 +228,6 @@ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TCK]
+ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TDI]
+ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TMS]
+ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TDO]
+-set_property CLOCK_DEDICATED_ROUTE FALSE [get_nets EJTAG_TCK_IBUF]
+ 
+ create_clock -period 40.000 -name mrxclk_0 -waveform {0.000 20.000} [get_ports mrxclk_0]
+ create_clock -period 40.000 -name mtxclk_0 -waveform {0.000 20.000} [get_ports mtxclk_0]

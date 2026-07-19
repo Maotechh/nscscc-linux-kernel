@@ -1,0 +1,11 @@
+busybox_commit=db726ae0c61ffec6b58e19749e0c63aaaf4f6989
+config=/home/geekpie/work/linux-bringup-db7abacb-20260719/kernel-src-bundle/scripts/nscscc/busybox-1.33.config
+config_sha256=71f6ee381f177f4722c522753f79095a571ec22637ee222d0ca9219b0b5f9975
+toolchain=8.3.0
+artifact=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-net/busybox-repro-c
+size=2305144
+sha256=72827c680b3b2afd73fd64d7ca99137e92019a6539527fa453c570ee616e1fff
+banner=BusyBox v1.33.2 ()
+elf_class=ELF32
+elf_machine=LoongArch
+file=ELF 32-bit LSB executable, LoongArch, version 1 (SYSV), statically linked, for GNU/Linux 4.15.0, stripped

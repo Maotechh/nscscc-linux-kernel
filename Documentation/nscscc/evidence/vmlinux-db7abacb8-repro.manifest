@@ -1,0 +1,17 @@
+kernel_commit=db7abacb8820fd0ca5212e2930d74118be7d8a8e
+artifact=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-repro/vmlinux-db7abacb8-repro
+debug_artifact=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-repro/vmlinux-db7abacb8-repro-debug
+initramfs=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-repro/initramfs-db7abacb8.cpio.gz
+size=16252992
+sha256=b0571e60b8860fabdfa0bbdd41f2d3c7269083e71bb09ccc3b392e3f1769f6ae
+crc32=424073b5
+elf_class=ELF32
+elf_machine=LoongArch
+entry=0xa0b84c70
+kernel_entry=0xa0b84c70
+first_load=0xa0300000
+load_memsz=0xffc284
+load_end=0xa12fc284
+tftp_address=0xa3000000
+tftp_end=0xa3f80040
+ddr_end=0xa8000000

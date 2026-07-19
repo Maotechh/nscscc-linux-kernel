@@ -1,0 +1,73 @@
+#!/bin/sh
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+
+# Physical addresses from IP/CONFREG/confreg_syn.v in the Chiplab loongson
+# project used to build the Linux FPGA bitstream.
+LED_ADDR=0x1fd0f000
+NUM_ADDR=0x1fd0f010
+SWITCH_ADDR=0x1fd0f020
+BTN_KEY_ADDR=0x1fd0f024
+BTN_STEP_ADDR=0x1fd0f028
+CONFREG_SYSFS=/sys/class/chiplab_confreg/chiplab_confreg
+
+has_confreg_driver() {
+	[ -r "${CONFREG_SYSFS}/switch" ] &&
+		[ -w "${CONFREG_SYSFS}/led" ] &&
+		[ -w "${CONFREG_SYSFS}/display" ]
+}
+
+usage() {
+	cat <<'EOF'
+Usage: nscscc-board COMMAND [VALUE]
+
+Commands:
+  read             Read switches and buttons
+  led VALUE        Set the 16 LEDs from a 32-bit value
+  display VALUE    Set eight hexadecimal seven-segment digits
+  clear            Clear LEDs and seven-segment digits
+EOF
+}
+
+case "${1:-}" in
+	read)
+		if has_confreg_driver; then
+			echo "switches=$(cat "${CONFREG_SYSFS}/switch")"
+			echo "buttons=$(cat "${CONFREG_SYSFS}/btn_key")"
+			echo "step_buttons=$(cat "${CONFREG_SYSFS}/btn_step")"
+		else
+			echo "switches=$(devmem "${SWITCH_ADDR}" 32)"
+			echo "buttons=$(devmem "${BTN_KEY_ADDR}" 32)"
+			echo "step_buttons=$(devmem "${BTN_STEP_ADDR}" 32)"
+		fi
+		;;
+	led)
+		[ $# -eq 2 ] || { usage >&2; exit 2; }
+		if has_confreg_driver; then
+			echo "$2" > "${CONFREG_SYSFS}/led"
+		else
+			devmem "${LED_ADDR}" 32 "$2"
+		fi
+		;;
+	display)
+		[ $# -eq 2 ] || { usage >&2; exit 2; }
+		if has_confreg_driver; then
+			echo "$2" > "${CONFREG_SYSFS}/display"
+		else
+			devmem "${NUM_ADDR}" 32 "$2"
+		fi
+		;;
+	clear)
+		if has_confreg_driver; then
+			echo 0 > "${CONFREG_SYSFS}/led"
+			echo 0 > "${CONFREG_SYSFS}/display"
+		else
+			devmem "${LED_ADDR}" 32 0
+			devmem "${NUM_ADDR}" 32 0
+		fi
+		;;
+	*)
+		usage >&2
+		exit 2
+		;;
+esac

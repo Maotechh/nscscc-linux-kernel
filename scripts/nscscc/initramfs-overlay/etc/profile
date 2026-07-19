@@ -1,0 +1,5 @@
+export HOME=/root
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PS1='[\u@nscscc \w]# '
+umask 022
+

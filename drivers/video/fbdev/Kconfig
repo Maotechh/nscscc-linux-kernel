@@ -1998,6 +1998,18 @@ config FB_XILINX
 	  framebuffer. ML300 carries a 640*480 LCD display on the board,
 	  ML403 uses a standard DB15 VGA connector.
 
+config FB_XILINX_ACCL
+	tristate "Xilinx TFT framebuffer with framebuffer DMA acceleration"
+	depends on FB && OF && HAS_IOMEM
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	help
+	  Support the Xilinx AXI TFT controller used by the NSCSCC
+	  experiment-box display path. The device tree must provide the
+	  controller register block and the optional framebuffer read, write,
+	  and modifier register blocks.
+
 config FB_GOLDFISH
 	tristate "Goldfish Framebuffer"
 	depends on FB

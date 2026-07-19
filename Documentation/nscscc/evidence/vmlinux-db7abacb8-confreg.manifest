@@ -1,0 +1,17 @@
+kernel_commit=db7abacb8820fd0ca5212e2930d74118be7d8a8e
+artifact=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-confreg-script/vmlinux-db7abacb8-confreg
+debug_artifact=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-confreg-script/vmlinux-db7abacb8-confreg-debug
+initramfs=/home/geekpie/work/linux-bringup-db7abacb-20260719/artifacts/nscscc-confreg-script/initramfs-db7abacb8.cpio.gz
+size=16232468
+sha256=83d5b557105d5c515218c5cdcf2e9c04a39600591491ba31b8e6c1196a386f83
+crc32=e62f945e
+elf_class=ELF32
+elf_machine=LoongArch
+entry=0xa0b859f0
+kernel_entry=0xa0b859f0
+first_load=0xa0300000
+load_memsz=0xffc284
+load_end=0xa12fc284
+tftp_address=0xa3000000
+tftp_end=0xa3f7b014
+ddr_end=0xa8000000
