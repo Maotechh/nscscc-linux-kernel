@@ -41,6 +41,13 @@ if [[ ! -d ${base_rootfs} ]]; then
 	exit 1
 fi
 
+for path in init etc/inittab etc/init.d/rcS etc/init.d/S40network; do
+	if [[ ! -f ${overlay_dir}/${path} ]]; then
+		echo "Initramfs overlay is missing ${path}: ${overlay_dir}/${path}" >&2
+		exit 1
+	fi
+done
+
 if [[ ${auto_net} != 0 && ${auto_net} != 1 ]]; then
 	echo "NSCSCC_AUTO_NET must be 0 or 1" >&2
 	exit 1

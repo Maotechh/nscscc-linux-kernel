@@ -1,0 +1,24 @@
+#!/bin/sh
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export HOME=/root
+export PATH
+
+mount -o remount,rw / 2>/dev/null || true
+mkdir -p /dev/pts /dev/shm /run /tmp /var/log /var/run
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run 2>/dev/null || true
+chmod 1777 /tmp
+
+if [ -r /etc/hostname ]; then
+	hostname "$(cat /etc/hostname)"
+fi
+
+for script in /etc/init.d/S??*; do
+	[ -f "${script}" ] || continue
+	"${script}" start || echo "Startup failed: ${script}"
+done
+
+echo
+cat /etc/issue
+echo "Run nscscc-check for the standard demonstration checks."

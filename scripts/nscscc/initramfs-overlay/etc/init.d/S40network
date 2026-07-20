@@ -1,0 +1,58 @@
+#!/bin/sh
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+config=/etc/nscscc/network.conf
+
+AUTO_NET=0
+INTERFACE=eth0
+IP_CIDR=10.90.50.44/24
+SERVER_IP=10.90.50.43
+[ -r "${config}" ] && . "${config}"
+
+start_network() {
+	ip link set lo up
+	if [ "${AUTO_NET}" != 1 ]; then
+		echo "NSCSCC automatic network configuration is disabled."
+		return 0
+	fi
+
+	if ! ip link show "${INTERFACE}" >/dev/null 2>&1; then
+		echo "Network interface not found: ${INTERFACE}" >&2
+		return 1
+	fi
+
+	ip link set "${INTERFACE}" up
+	ip addr flush dev "${INTERFACE}"
+	ip addr add "${IP_CIDR}" dev "${INTERFACE}"
+	echo "Configured ${INTERFACE} as ${IP_CIDR}; server ${SERVER_IP}."
+}
+
+stop_network() {
+	if ip link show "${INTERFACE}" >/dev/null 2>&1; then
+		ip addr flush dev "${INTERFACE}"
+		ip link set "${INTERFACE}" down
+	fi
+}
+
+case "${1:-start}" in
+	start)
+		start_network
+		;;
+	stop)
+		stop_network
+		;;
+	restart)
+		stop_network
+		start_network
+		;;
+	status)
+		ip addr show "${INTERFACE}"
+		;;
+	ping)
+		ping -c 3 -W 2 "${SERVER_IP}"
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status|ping}" >&2
+		exit 2
+		;;
+esac

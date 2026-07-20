@@ -4,6 +4,8 @@
 *.mod
 *.cmd
 *.d
+!scripts/nscscc/initramfs-overlay/etc/init.d/
+!scripts/nscscc/initramfs-overlay/etc/init.d/**
 .tmp_*
 vmlinux
 vmlinux.bin
@@ -11,4 +13,3 @@ System.map
 Module.symvers
 modules.order
 !.gitignore
-
