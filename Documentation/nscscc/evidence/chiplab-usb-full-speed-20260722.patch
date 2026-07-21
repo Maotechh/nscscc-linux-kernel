@@ -1,0 +1,3573 @@
+diff --git a/IP/APB_DEV/USB/README.md b/IP/APB_DEV/USB/README.md
+new file mode 100644
+index 0000000..5499605
+--- /dev/null
++++ b/IP/APB_DEV/USB/README.md
+@@ -0,0 +1,17 @@
++# USB Full-Speed host integration
++
++The controller RTL in this directory is the NSCSCC/JIT-THU modification of
++UltraEmbedded's USB Full-Speed host. The upstream RTL reference is commit
++`81eb9f131dbb434a9047ae074fea5c31ef46ce5d` from
++`ultraembedded/core_usb_host`. The JIT-THU version adds the `USB_CTRL2`
++register at offset `0x24`, a software-controlled PHY reset, and fixes the AXI
++write ordering expected by its register block.
++
++`apb_usbh_bridge.v` is specific to this Chiplab integration. It transfers one
++APB request at a time between the 100 MHz uncore clock and the 60 MHz UTMI
++clock. Writes deliberately send AXI-Lite AW before W because the modified V0.5
++register block does not accept write data before the address.
++
++The controller is mapped at physical address `0x1fe0c000`. Its SoC interrupt
++input is `6`, corresponding to LoongArch CPU interrupt number `8` in the Linux
++device tree.
+diff --git a/IP/APB_DEV/USB/apb_usbh_bridge.v b/IP/APB_DEV/USB/apb_usbh_bridge.v
+new file mode 100644
+index 0000000..7ce0258
+--- /dev/null
++++ b/IP/APB_DEV/USB/apb_usbh_bridge.v
+@@ -0,0 +1,213 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++//
++// One-outstanding-transaction APB to AXI-Lite bridge for the USB host.
++// APB runs on the SoC uncore clock while the USB controller runs on UTMI_clk.
++module apb_usbh_bridge (
++    input  wire        apb_clk,
++    input  wire        apb_resetn,
++    input  wire        apb_psel,
++    input  wire        apb_penable,
++    input  wire        apb_pwrite,
++    input  wire [19:0] apb_paddr,
++    input  wire [31:0] apb_pwdata,
++    output reg  [31:0] apb_prdata,
++    output wire        apb_pready,
++
++    input  wire        usb_clk,
++    input  wire        usb_resetn,
++    output wire [31:0] cfg_awaddr,
++    output wire        cfg_awvalid,
++    input  wire        cfg_awready,
++    output wire [31:0] cfg_wdata,
++    output wire [3:0]  cfg_wstrb,
++    output wire        cfg_wvalid,
++    input  wire        cfg_wready,
++    input  wire [1:0]  cfg_bresp,
++    input  wire        cfg_bvalid,
++    output wire        cfg_bready,
++    output wire [31:0] cfg_araddr,
++    output wire        cfg_arvalid,
++    input  wire        cfg_arready,
++    input  wire [31:0] cfg_rdata,
++    input  wire [1:0]  cfg_rresp,
++    input  wire        cfg_rvalid,
++    output wire        cfg_rready
++);
++
++localparam [1:0] APB_IDLE     = 2'd0;
++localparam [1:0] APB_WAIT     = 2'd1;
++localparam [1:0] APB_COMPLETE = 2'd2;
++
++localparam [2:0] USB_IDLE    = 3'd0;
++localparam [2:0] USB_WRITE_A = 3'd1;
++localparam [2:0] USB_WRITE_D = 3'd2;
++localparam [2:0] USB_WRITE_B = 3'd3;
++localparam [2:0] USB_READ_A  = 3'd4;
++localparam [2:0] USB_READ_D  = 3'd5;
++
++reg [1:0] apb_state;
++reg       request_toggle;
++reg       request_write;
++reg [31:0] request_addr;
++reg [31:0] request_data;
++
++(* ASYNC_REG = "TRUE" *) reg response_toggle_sync1;
++(* ASYNC_REG = "TRUE" *) reg response_toggle_sync2;
++reg response_toggle_seen;
++(* ASYNC_REG = "TRUE" *) reg [31:0] response_data_sync1;
++(* ASYNC_REG = "TRUE" *) reg [31:0] response_data_sync2;
++
++reg [2:0] usb_state;
++(* ASYNC_REG = "TRUE" *) reg request_toggle_sync1;
++(* ASYNC_REG = "TRUE" *) reg request_toggle_sync2;
++reg request_toggle_seen;
++(* ASYNC_REG = "TRUE" *) reg request_write_sync1;
++(* ASYNC_REG = "TRUE" *) reg request_write_sync2;
++(* ASYNC_REG = "TRUE" *) reg [31:0] request_addr_sync1;
++(* ASYNC_REG = "TRUE" *) reg [31:0] request_addr_sync2;
++(* ASYNC_REG = "TRUE" *) reg [31:0] request_data_sync1;
++(* ASYNC_REG = "TRUE" *) reg [31:0] request_data_sync2;
++
++reg        usb_request_write;
++reg [31:0] usb_request_addr;
++reg [31:0] usb_request_data;
++reg [31:0] response_data;
++reg        response_toggle;
++
++assign apb_pready = (apb_state == APB_COMPLETE);
++
++assign cfg_awaddr  = usb_request_addr;
++assign cfg_awvalid = (usb_state == USB_WRITE_A);
++assign cfg_wdata   = usb_request_data;
++assign cfg_wstrb   = 4'hf;
++assign cfg_wvalid  = (usb_state == USB_WRITE_D);
++assign cfg_bready  = (usb_state == USB_WRITE_B);
++assign cfg_araddr  = usb_request_addr;
++assign cfg_arvalid = (usb_state == USB_READ_A);
++assign cfg_rready  = (usb_state == USB_READ_D);
++
++// The response payload is held until the next USB-domain response. The toggle
++// arrives only after the payload has propagated through two APB-domain stages.
++always @(posedge apb_clk or negedge apb_resetn) begin
++    if (!apb_resetn) begin
++        apb_state            <= APB_IDLE;
++        request_toggle       <= 1'b0;
++        request_write        <= 1'b0;
++        request_addr         <= 32'b0;
++        request_data         <= 32'b0;
++        response_toggle_sync1 <= 1'b0;
++        response_toggle_sync2 <= 1'b0;
++        response_toggle_seen <= 1'b0;
++        response_data_sync1  <= 32'b0;
++        response_data_sync2  <= 32'b0;
++        apb_prdata            <= 32'b0;
++    end else begin
++        response_toggle_sync1 <= response_toggle;
++        response_toggle_sync2 <= response_toggle_sync1;
++        response_data_sync1   <= response_data;
++        response_data_sync2   <= response_data_sync1;
++
++        case (apb_state)
++        APB_IDLE: begin
++            if (apb_psel && apb_penable) begin
++                request_write  <= apb_pwrite;
++                request_addr   <= {12'b0, apb_paddr};
++                request_data   <= apb_pwdata;
++                request_toggle <= ~request_toggle;
++                apb_state      <= APB_WAIT;
++            end
++        end
++        APB_WAIT: begin
++            if (response_toggle_sync2 != response_toggle_seen) begin
++                response_toggle_seen <= response_toggle_sync2;
++                apb_prdata           <= response_data_sync2;
++                apb_state            <= APB_COMPLETE;
++            end
++        end
++        APB_COMPLETE: begin
++            apb_state <= APB_IDLE;
++        end
++        default: apb_state <= APB_IDLE;
++        endcase
++    end
++end
++
++// Only one command may be active. The modified V0.5 USB register block does
++// not accept W before AW, so write address and data use separate states.
++always @(posedge usb_clk or negedge usb_resetn) begin
++    if (!usb_resetn) begin
++        request_toggle_sync1 <= 1'b0;
++        request_toggle_sync2 <= 1'b0;
++        request_toggle_seen  <= 1'b0;
++        request_write_sync1  <= 1'b0;
++        request_write_sync2  <= 1'b0;
++        request_addr_sync1   <= 32'b0;
++        request_addr_sync2   <= 32'b0;
++        request_data_sync1   <= 32'b0;
++        request_data_sync2   <= 32'b0;
++        usb_request_write    <= 1'b0;
++        usb_request_addr     <= 32'b0;
++        usb_request_data     <= 32'b0;
++        response_data        <= 32'b0;
++        response_toggle      <= 1'b0;
++        usb_state            <= USB_IDLE;
++    end else begin
++        request_toggle_sync1 <= request_toggle;
++        request_toggle_sync2 <= request_toggle_sync1;
++        request_write_sync1  <= request_write;
++        request_write_sync2  <= request_write_sync1;
++        request_addr_sync1   <= request_addr;
++        request_addr_sync2   <= request_addr_sync1;
++        request_data_sync1   <= request_data;
++        request_data_sync2   <= request_data_sync1;
++
++        case (usb_state)
++        USB_IDLE: begin
++            if (request_toggle_sync2 != request_toggle_seen) begin
++                request_toggle_seen <= request_toggle_sync2;
++                usb_request_write   <= request_write_sync2;
++                usb_request_addr    <= request_addr_sync2;
++                usb_request_data    <= request_data_sync2;
++                if (request_write_sync2)
++                    usb_state <= USB_WRITE_A;
++                else
++                    usb_state <= USB_READ_A;
++            end
++        end
++        USB_WRITE_A: begin
++            if (cfg_awready)
++                usb_state <= USB_WRITE_D;
++        end
++        USB_WRITE_D: begin
++            if (cfg_wready)
++                usb_state <= USB_WRITE_B;
++        end
++        USB_WRITE_B: begin
++            if (cfg_bvalid) begin
++                response_data   <= {30'b0, cfg_bresp};
++                response_toggle <= ~response_toggle;
++                usb_state       <= USB_IDLE;
++            end
++        end
++        USB_READ_A: begin
++            if (cfg_arready)
++                usb_state <= USB_READ_D;
++        end
++        USB_READ_D: begin
++            if (cfg_rvalid) begin
++                response_data   <= cfg_rdata;
++                response_toggle <= ~response_toggle;
++                usb_state       <= USB_IDLE;
++            end
++        end
++        default: usb_state <= USB_IDLE;
++        endcase
++    end
++end
++
++// The current APB implementation has no PSLVERR signal. AXI-Lite responses
++// are still consumed so a peripheral-side error cannot stall the bus.
++wire unused_cfg_rresp = |cfg_rresp;
++wire unused_usb_request_write = usb_request_write;
++
++endmodule
+diff --git a/IP/APB_DEV/USB/sim/apb_usbh_bridge_tb.v b/IP/APB_DEV/USB/sim/apb_usbh_bridge_tb.v
+new file mode 100644
+index 0000000..6b9438b
+--- /dev/null
++++ b/IP/APB_DEV/USB/sim/apb_usbh_bridge_tb.v
+@@ -0,0 +1,144 @@
++`timescale 1ns/1ps
++
++module apb_usbh_bridge_tb;
++reg apb_clk = 1'b0;
++reg usb_clk = 1'b0;
++reg apb_resetn = 1'b0;
++reg usb_resetn = 1'b0;
++reg apb_psel = 1'b0;
++reg apb_penable = 1'b0;
++reg apb_pwrite = 1'b0;
++reg [19:0] apb_paddr = 20'b0;
++reg [31:0] apb_pwdata = 32'b0;
++wire [31:0] apb_prdata;
++wire apb_pready;
++
++wire [31:0] cfg_awaddr;
++wire cfg_awvalid;
++wire cfg_awready;
++wire [31:0] cfg_wdata;
++wire [3:0] cfg_wstrb;
++wire cfg_wvalid;
++wire cfg_wready;
++reg [1:0] cfg_bresp = 2'b0;
++reg cfg_bvalid = 1'b0;
++wire cfg_bready;
++wire [31:0] cfg_araddr;
++wire cfg_arvalid;
++wire cfg_arready;
++reg [31:0] cfg_rdata = 32'b0;
++reg [1:0] cfg_rresp = 2'b0;
++reg cfg_rvalid = 1'b0;
++wire cfg_rready;
++
++reg [31:0] register_file [0:15];
++reg [31:0] accepted_awaddr;
++reg aw_seen = 1'b0;
++integer index;
++
++always #5 apb_clk = ~apb_clk;
++always #8.333 usb_clk = ~usb_clk;
++
++assign cfg_awready = cfg_awvalid && !aw_seen;
++assign cfg_wready = cfg_wvalid && aw_seen;
++assign cfg_arready = cfg_arvalid && !cfg_rvalid;
++
++apb_usbh_bridge dut (
++    .apb_clk(apb_clk), .apb_resetn(apb_resetn),
++    .apb_psel(apb_psel), .apb_penable(apb_penable),
++    .apb_pwrite(apb_pwrite), .apb_paddr(apb_paddr),
++    .apb_pwdata(apb_pwdata), .apb_prdata(apb_prdata),
++    .apb_pready(apb_pready), .usb_clk(usb_clk),
++    .usb_resetn(usb_resetn), .cfg_awaddr(cfg_awaddr),
++    .cfg_awvalid(cfg_awvalid), .cfg_awready(cfg_awready),
++    .cfg_wdata(cfg_wdata), .cfg_wstrb(cfg_wstrb),
++    .cfg_wvalid(cfg_wvalid), .cfg_wready(cfg_wready),
++    .cfg_bresp(cfg_bresp), .cfg_bvalid(cfg_bvalid),
++    .cfg_bready(cfg_bready), .cfg_araddr(cfg_araddr),
++    .cfg_arvalid(cfg_arvalid), .cfg_arready(cfg_arready),
++    .cfg_rdata(cfg_rdata), .cfg_rresp(cfg_rresp),
++    .cfg_rvalid(cfg_rvalid), .cfg_rready(cfg_rready)
++);
++
++always @(posedge usb_clk) begin
++    if (cfg_awvalid && cfg_awready) begin
++        accepted_awaddr <= cfg_awaddr;
++        aw_seen <= 1'b1;
++    end
++    if (cfg_wvalid && cfg_wready) begin
++        register_file[accepted_awaddr[5:2]] <= cfg_wdata;
++        aw_seen <= 1'b0;
++        cfg_bvalid <= 1'b1;
++    end else if (cfg_bvalid && cfg_bready) begin
++        cfg_bvalid <= 1'b0;
++    end
++
++    if (cfg_arvalid && cfg_arready) begin
++        cfg_rdata <= register_file[cfg_araddr[5:2]];
++        cfg_rvalid <= 1'b1;
++    end else if (cfg_rvalid && cfg_rready) begin
++        cfg_rvalid <= 1'b0;
++    end
++end
++
++task apb_write;
++    input [19:0] address;
++    input [31:0] data;
++    begin
++        @(posedge apb_clk);
++        apb_psel <= 1'b1;
++        apb_pwrite <= 1'b1;
++        apb_paddr <= address;
++        apb_pwdata <= data;
++        @(posedge apb_clk);
++        apb_penable <= 1'b1;
++        while (!apb_pready)
++            @(posedge apb_clk);
++        apb_psel <= 1'b0;
++        apb_penable <= 1'b0;
++        apb_pwrite <= 1'b0;
++    end
++endtask
++
++task apb_read;
++    input [19:0] address;
++    input [31:0] expected;
++    begin
++        @(posedge apb_clk);
++        apb_psel <= 1'b1;
++        apb_pwrite <= 1'b0;
++        apb_paddr <= address;
++        @(posedge apb_clk);
++        apb_penable <= 1'b1;
++        while (!apb_pready)
++            @(posedge apb_clk);
++        if (apb_prdata !== expected) begin
++            $display("FAIL: read %08x, expected %08x", apb_prdata, expected);
++            $finish(1);
++        end
++        apb_psel <= 1'b0;
++        apb_penable <= 1'b0;
++    end
++endtask
++
++initial begin
++    for (index = 0; index < 16; index = index + 1)
++        register_file[index] = 32'b0;
++    repeat (4) @(posedge apb_clk);
++    apb_resetn <= 1'b1;
++    usb_resetn <= 1'b1;
++    apb_write(20'h0c024, 32'h00000001);
++    apb_read(20'h0c024, 32'h00000001);
++    apb_write(20'h0c010, 32'h0000000f);
++    apb_read(20'h0c010, 32'h0000000f);
++    $display("PASS: asynchronous APB/AXI-Lite write and read sequencing");
++    $finish(0);
++end
++
++initial begin
++    #20000;
++    $display("FAIL: timeout");
++    $finish(1);
++end
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_crc16.v b/IP/APB_DEV/USB/usbh_crc16.v
+new file mode 100755
+index 0000000..b7dc355
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_crc16.v
+@@ -0,0 +1,70 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++//-----------------------------------------------------------------
++// Module: 16-bit CRC used by USB data packets
++//-----------------------------------------------------------------
++module usbh_crc16
++(
++    input [15:0]    crc_i,
++    input [7:0]     data_i,
++    output [15:0]   crc_o
++);
++
++//-----------------------------------------------------------------
++// Implementation
++//-----------------------------------------------------------------
++
++	(* MARK_DEBUG="true" *) wire [7:0] d = {data_i[0], data_i[1], data_i[2], data_i[3],
++						data_i[4], data_i[5], data_i[6], data_i[7]};
++	(* MARK_DEBUG="true" *) wire [15:0] c = crc_i;
++	assign crc_o = {
++		^d[7:0] ^ ^c[15:7],
++		c[6],
++		c[5],
++		c[4],
++		c[3],
++		c[2],
++		d[7] ^ c[1] ^ c[15],
++		^d[7:6] ^ ^c[0] ^ ^c[15:14],
++		^d[6:5] ^ ^c[14:13],
++		^d[5:4] ^ ^c[13:12],
++		^d[4:3] ^ ^c[12:11],
++		^d[3:2] ^ ^c[11:10],
++		^d[2:1] ^ ^c[10:9],
++		^d[1:0] ^ ^c[9:8],
++		^d[7:1] ^ ^c[15:9],
++		^d[7:0] ^ ^c[15:8]
++	};
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_crc5.v b/IP/APB_DEV/USB/usbh_crc5.v
+new file mode 100755
+index 0000000..35303f0
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_crc5.v
+@@ -0,0 +1,62 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++//-----------------------------------------------------------------
++// Module: 5-bit CRC used by USB tokens
++//-----------------------------------------------------------------
++module usbh_crc5
++(
++    input [4:0]     crc_i,
++    input [10:0]    data_i,
++    output [4:0]    crc_o
++);
++
++//-----------------------------------------------------------------
++// Implementation
++//-----------------------------------------------------------------
++assign crc_o[0] =    data_i[10] ^ data_i[9] ^ data_i[6] ^ data_i[5] ^ data_i[3] ^ data_i[0] ^
++                       crc_i[0] ^ crc_i[3] ^ crc_i[4];
++
++assign crc_o[1] =    data_i[10] ^ data_i[7] ^ data_i[6] ^ data_i[4] ^ data_i[1] ^
++                       crc_i[0] ^ crc_i[1] ^ crc_i[4];
++
++assign crc_o[2] =    data_i[10] ^ data_i[9] ^ data_i[8] ^ data_i[7] ^ data_i[6] ^ data_i[3] ^ data_i[2] ^ data_i[0] ^
++                       crc_i[0] ^ crc_i[1] ^ crc_i[2] ^ crc_i[3] ^ crc_i[4];
++
++assign crc_o[3] =    data_i[10] ^ data_i[9] ^ data_i[8] ^ data_i[7] ^ data_i[4] ^ data_i[3] ^ data_i[1] ^ 
++                       crc_i[1] ^ crc_i[2] ^ crc_i[3] ^ crc_i[4];
++
++assign crc_o[4] =    data_i[10] ^ data_i[9] ^ data_i[8] ^ data_i[5] ^ data_i[4] ^ data_i[2] ^
++                       crc_i[2] ^ crc_i[3] ^ crc_i[4];
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_fifo.v b/IP/APB_DEV/USB/usbh_fifo.v
+new file mode 100755
+index 0000000..87db10c
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_fifo.v
+@@ -0,0 +1,77 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++
++module usbh_fifo
++(
++    // Inputs
++     input           clk_i
++    ,input           rst_i
++    ,input  [  7:0]  data_i
++    ,input           push_i
++    ,input           pop_i
++    ,input           flush_i
++
++    // Outputs
++    ,output          full_o
++    ,output          empty_o
++    ,output [  7:0]  data_o
++);
++
++
++
++parameter WIDTH   = 8;
++parameter DEPTH   = 64;
++parameter ADDR_W  = 6;
++
++xpm_fifo_sync #(
++	.FIFO_WRITE_DEPTH(DEPTH),
++	.WRITE_DATA_WIDTH(WIDTH),
++	.WR_DATA_COUNT_WIDTH(ADDR_W),
++	.READ_DATA_WIDTH(WIDTH),
++	.RD_DATA_COUNT_WIDTH(ADDR_W),
++	.READ_MODE("fwft"),
++	.FIFO_READ_LATENCY(0)
++) xpm_fifo_sync_inst (
++	.wr_clk(clk_i),
++	.wr_en(push_i),
++	.din(data_i),
++	.full(full_o),
++	.rst(rst_i),
++	.rd_en(pop_i),
++	.dout(data_o),
++	.empty(empty_o)
++);
++
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_host.v b/IP/APB_DEV/USB/usbh_host.v
+new file mode 100755
+index 0000000..edb4ec3
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_host.v
+@@ -0,0 +1,1049 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++
++`include "usbh_host_defs.v"
++
++//-----------------------------------------------------------------
++// Module:  USB Host IP
++//-----------------------------------------------------------------
++module usbh_host
++(
++    // Inputs
++     input          clk_i
++    ,input          rst_i
++    ,input          cfg_awvalid_i
++    ,input  [31:0]  cfg_awaddr_i
++    ,input          cfg_wvalid_i
++    ,input  [31:0]  cfg_wdata_i
++    ,input  [3:0]   cfg_wstrb_i
++    ,input          cfg_bready_i
++    ,input          cfg_arvalid_i
++    ,input  [31:0]  cfg_araddr_i
++    ,input          cfg_rready_i
++    ,input  [7:0]   utmi_data_in_i
++    ,input          utmi_txready_i
++    ,input          utmi_rxvalid_i
++    ,input          utmi_rxactive_i
++    ,input          utmi_rxerror_i
++    ,input  [1:0]   utmi_linestate_i
++
++    // Outputs
++    ,output         cfg_awready_o
++    ,output         cfg_wready_o
++    ,output         cfg_bvalid_o
++    ,output [1:0]   cfg_bresp_o
++    ,output         cfg_arready_o
++    ,output         cfg_rvalid_o
++    ,output [31:0]  cfg_rdata_o
++    ,output [1:0]   cfg_rresp_o
++    ,output         intr_o
++    ,output [7:0]   utmi_data_out_o
++    ,output         utmi_txvalid_o
++    ,output [1:0]   utmi_op_mode_o
++    ,output [1:0]   utmi_xcvrselect_o
++    ,output         utmi_termselect_o
++    ,output         utmi_dppulldown_o
++    ,output         utmi_dmpulldown_o
++    ,output         utmi_reset_o
++);
++
++//-----------------------------------------------------------------
++// Retime write data
++//-----------------------------------------------------------------
++(* MARK_DEBUG="true" *) reg [31:0] wr_data_q;
++(* MARK_DEBUG="true" *) reg wr_data_valid_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i | write_en_w) begin
++    wr_data_q <= 32'b0;
++    wr_data_valid_q <= 1'b0;
++end else if (cfg_wready_o & cfg_wvalid_i) begin
++    wr_data_q <= cfg_wdata_i;
++    wr_data_valid_q <= 1'b1;
++end
++
++(* MARK_DEBUG="true" *) reg [31:0] wr_addr_q;
++(* MARK_DEBUG="true" *) reg wr_addr_valid_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i | write_en_w) begin
++    wr_addr_q <= 32'b0;
++    wr_addr_valid_q <= 1'b0;
++end else if (cfg_awready_o & cfg_awvalid_i) begin
++    wr_addr_q <= cfg_awaddr_i;
++    wr_addr_valid_q <= 1'b1;
++end
++
++//-----------------------------------------------------------------
++// Request Logic
++//-----------------------------------------------------------------
++wire read_en_w  = cfg_arvalid_i & cfg_arready_o;
++wire write_en_w = wr_data_valid_q & wr_addr_valid_q;
++
++//-----------------------------------------------------------------
++// Accept Logic
++//-----------------------------------------------------------------
++assign cfg_arready_o = ~cfg_rvalid_o;
++assign cfg_awready_o = ~cfg_bvalid_o && ~cfg_arvalid_i && ~wr_addr_valid_q; 
++assign cfg_wready_o = ~cfg_bvalid_o && ~cfg_arvalid_i && ~wr_data_valid_q && wr_addr_valid_q; 
++
++
++//-----------------------------------------------------------------
++// Register usb_ctrl
++//-----------------------------------------------------------------
++reg usb_ctrl_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_wr_q <= 1'b1;
++else
++    usb_ctrl_wr_q <= 1'b0;
++
++// usb_ctrl_phy_dmpulldown [internal]
++reg        usb_ctrl_phy_dmpulldown_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_phy_dmpulldown_q <= 1'd`USB_CTRL_PHY_DMPULLDOWN_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_phy_dmpulldown_q <= wr_data_q[`USB_CTRL_PHY_DMPULLDOWN_R];
++
++wire        usb_ctrl_phy_dmpulldown_out_w = usb_ctrl_phy_dmpulldown_q;
++
++
++// usb_ctrl_phy_dppulldown [internal]
++reg        usb_ctrl_phy_dppulldown_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_phy_dppulldown_q <= 1'd`USB_CTRL_PHY_DPPULLDOWN_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_phy_dppulldown_q <= wr_data_q[`USB_CTRL_PHY_DPPULLDOWN_R];
++
++wire        usb_ctrl_phy_dppulldown_out_w = usb_ctrl_phy_dppulldown_q;
++
++
++// usb_ctrl_phy_termselect [internal]
++reg        usb_ctrl_phy_termselect_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_phy_termselect_q <= 1'd`USB_CTRL_PHY_TERMSELECT_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_phy_termselect_q <= wr_data_q[`USB_CTRL_PHY_TERMSELECT_R];
++
++wire        usb_ctrl_phy_termselect_out_w = usb_ctrl_phy_termselect_q;
++
++
++// usb_ctrl_phy_xcvrselect [internal]
++reg [1:0]  usb_ctrl_phy_xcvrselect_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_phy_xcvrselect_q <= 2'd`USB_CTRL_PHY_XCVRSELECT_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_phy_xcvrselect_q <= wr_data_q[`USB_CTRL_PHY_XCVRSELECT_R];
++
++wire [1:0]  usb_ctrl_phy_xcvrselect_out_w = usb_ctrl_phy_xcvrselect_q;
++
++
++// usb_ctrl_phy_opmode [internal]
++reg [1:0]  usb_ctrl_phy_opmode_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_phy_opmode_q <= 2'd`USB_CTRL_PHY_OPMODE_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_phy_opmode_q <= wr_data_q[`USB_CTRL_PHY_OPMODE_R];
++
++wire [1:0]  usb_ctrl_phy_opmode_out_w = usb_ctrl_phy_opmode_q;
++
++
++// usb_ctrl_tx_flush [auto_clr]
++reg        usb_ctrl_tx_flush_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_tx_flush_q <= 1'd`USB_CTRL2_TX_FLUSH_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL2))
++    usb_ctrl_tx_flush_q <= wr_data_q[`USB_CTRL2_TX_FLUSH_R];
++else
++    usb_ctrl_tx_flush_q <= 1'd`USB_CTRL2_TX_FLUSH_DEFAULT;
++
++wire        usb_ctrl_tx_flush_out_w = usb_ctrl_tx_flush_q;
++
++
++// usb_ctrl_enable_sof [internal]
++reg        usb_ctrl_enable_sof_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl_enable_sof_q <= 1'd`USB_CTRL_ENABLE_SOF_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL))
++    usb_ctrl_enable_sof_q <= wr_data_q[`USB_CTRL_ENABLE_SOF_R];
++
++wire        usb_ctrl_enable_sof_out_w = usb_ctrl_enable_sof_q;
++
++// usb_ctrl2_phy_reset [internal]
++reg        usb_ctrl2_phy_reset_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_ctrl2_phy_reset_q <= 1'd`USB_CTRL2_PHY_RESET_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_CTRL2))
++    usb_ctrl2_phy_reset_q <= wr_data_q[`USB_CTRL2_PHY_RESET_R];
++
++assign utmi_reset_o = usb_ctrl2_phy_reset_q;
++
++
++//-----------------------------------------------------------------
++// Register usb_status
++//-----------------------------------------------------------------
++reg usb_status_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_status_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_STATUS))
++    usb_status_wr_q <= 1'b1;
++else
++    usb_status_wr_q <= 1'b0;
++
++
++
++
++//-----------------------------------------------------------------
++// Register usb_irq_ack
++//-----------------------------------------------------------------
++reg usb_irq_ack_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_ack_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_ACK))
++    usb_irq_ack_wr_q <= 1'b1;
++else
++    usb_irq_ack_wr_q <= 1'b0;
++
++// usb_irq_ack_device_detect [auto_clr]
++reg        usb_irq_ack_device_detect_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_ack_device_detect_q <= 1'd`USB_IRQ_ACK_DEVICE_DETECT_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_ACK))
++    usb_irq_ack_device_detect_q <= wr_data_q[`USB_IRQ_ACK_DEVICE_DETECT_R];
++else
++    usb_irq_ack_device_detect_q <= 1'd`USB_IRQ_ACK_DEVICE_DETECT_DEFAULT;
++
++wire        usb_irq_ack_device_detect_out_w = usb_irq_ack_device_detect_q;
++
++
++// usb_irq_ack_err [auto_clr]
++reg        usb_irq_ack_err_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_ack_err_q <= 1'd`USB_IRQ_ACK_ERR_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_ACK))
++    usb_irq_ack_err_q <= wr_data_q[`USB_IRQ_ACK_ERR_R];
++else
++    usb_irq_ack_err_q <= 1'd`USB_IRQ_ACK_ERR_DEFAULT;
++
++wire        usb_irq_ack_err_out_w = usb_irq_ack_err_q;
++
++
++// usb_irq_ack_done [auto_clr]
++reg        usb_irq_ack_done_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_ack_done_q <= 1'd`USB_IRQ_ACK_DONE_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_ACK))
++    usb_irq_ack_done_q <= wr_data_q[`USB_IRQ_ACK_DONE_R];
++else
++    usb_irq_ack_done_q <= 1'd`USB_IRQ_ACK_DONE_DEFAULT;
++
++wire        usb_irq_ack_done_out_w = usb_irq_ack_done_q;
++
++
++// usb_irq_ack_sof [auto_clr]
++reg        usb_irq_ack_sof_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_ack_sof_q <= 1'd`USB_IRQ_ACK_SOF_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_ACK))
++    usb_irq_ack_sof_q <= wr_data_q[`USB_IRQ_ACK_SOF_R];
++else
++    usb_irq_ack_sof_q <= 1'd`USB_IRQ_ACK_SOF_DEFAULT;
++
++wire        usb_irq_ack_sof_out_w = usb_irq_ack_sof_q;
++
++
++//-----------------------------------------------------------------
++// Register usb_irq_sts
++//-----------------------------------------------------------------
++reg usb_irq_sts_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_sts_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_STS))
++    usb_irq_sts_wr_q <= 1'b1;
++else
++    usb_irq_sts_wr_q <= 1'b0;
++
++
++
++
++
++//-----------------------------------------------------------------
++// Register usb_irq_mask
++//-----------------------------------------------------------------
++reg usb_irq_mask_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_mask_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_MASK))
++    usb_irq_mask_wr_q <= 1'b1;
++else
++    usb_irq_mask_wr_q <= 1'b0;
++
++// usb_irq_mask_device_detect [internal]
++reg        usb_irq_mask_device_detect_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_mask_device_detect_q <= 1'd`USB_IRQ_MASK_DEVICE_DETECT_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_MASK))
++    usb_irq_mask_device_detect_q <= wr_data_q[`USB_IRQ_MASK_DEVICE_DETECT_R];
++
++(* MARK_DEBUG = "TRUE" *)wire        usb_irq_mask_device_detect_out_w = usb_irq_mask_device_detect_q;
++
++
++// usb_irq_mask_err [internal]
++reg        usb_irq_mask_err_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_mask_err_q <= 1'd`USB_IRQ_MASK_ERR_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_MASK))
++    usb_irq_mask_err_q <= wr_data_q[`USB_IRQ_MASK_ERR_R];
++
++(* MARK_DEBUG = "TRUE" *)wire        usb_irq_mask_err_out_w = usb_irq_mask_err_q;
++
++
++// usb_irq_mask_done [internal]
++reg        usb_irq_mask_done_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_mask_done_q <= 1'd`USB_IRQ_MASK_DONE_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_MASK))
++    usb_irq_mask_done_q <= wr_data_q[`USB_IRQ_MASK_DONE_R];
++
++(* MARK_DEBUG = "TRUE" *)wire        usb_irq_mask_done_out_w = usb_irq_mask_done_q;
++
++
++// usb_irq_mask_sof [internal]
++reg        usb_irq_mask_sof_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_irq_mask_sof_q <= 1'd`USB_IRQ_MASK_SOF_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_IRQ_MASK))
++    usb_irq_mask_sof_q <= wr_data_q[`USB_IRQ_MASK_SOF_R];
++
++(* MARK_DEBUG = "TRUE" *)wire        usb_irq_mask_sof_out_w = usb_irq_mask_sof_q;
++
++
++//-----------------------------------------------------------------
++// Register usb_xfer_data
++//-----------------------------------------------------------------
++reg usb_xfer_data_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_data_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_DATA))
++    usb_xfer_data_wr_q <= 1'b1;
++else
++    usb_xfer_data_wr_q <= 1'b0;
++
++// usb_xfer_data_tx_len [internal]
++reg [15:0]  usb_xfer_data_tx_len_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_data_tx_len_q <= 16'd`USB_XFER_DATA_TX_LEN_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_DATA))
++    usb_xfer_data_tx_len_q <= wr_data_q[`USB_XFER_DATA_TX_LEN_R];
++
++wire [15:0]  usb_xfer_data_tx_len_out_w = usb_xfer_data_tx_len_q;
++
++
++//-----------------------------------------------------------------
++// Register usb_xfer_token
++//-----------------------------------------------------------------
++reg usb_xfer_token_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_wr_q <= 1'b1;
++else
++    usb_xfer_token_wr_q <= 1'b0;
++
++// usb_xfer_token_start [clearable]
++reg        usb_xfer_token_start_q;
++
++wire usb_xfer_token_start_ack_in_w;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_start_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_start_q <= wr_data_q[`USB_XFER_TOKEN_START_R];
++else if (usb_xfer_token_start_ack_in_w)
++    usb_xfer_token_start_q <= 1'b0;
++
++wire        usb_xfer_token_start_out_w = usb_xfer_token_start_q;
++
++
++// usb_xfer_token_in [internal]
++reg        usb_xfer_token_in_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_in_q <= 1'd`USB_XFER_TOKEN_IN_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_in_q <= wr_data_q[`USB_XFER_TOKEN_IN_R];
++
++wire        usb_xfer_token_in_out_w = usb_xfer_token_in_q;
++
++
++// usb_xfer_token_ack [internal]
++reg        usb_xfer_token_ack_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_ack_q <= 1'd`USB_XFER_TOKEN_ACK_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_ack_q <= wr_data_q[`USB_XFER_TOKEN_ACK_R];
++
++wire        usb_xfer_token_ack_out_w = usb_xfer_token_ack_q;
++
++
++// usb_xfer_token_pid_datax [internal]
++reg        usb_xfer_token_pid_datax_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_pid_datax_q <= 1'd`USB_XFER_TOKEN_PID_DATAX_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_pid_datax_q <= wr_data_q[`USB_XFER_TOKEN_PID_DATAX_R];
++
++wire        usb_xfer_token_pid_datax_out_w = usb_xfer_token_pid_datax_q;
++
++
++// usb_xfer_token_pid_bits [internal]
++reg [7:0]  usb_xfer_token_pid_bits_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_pid_bits_q <= 8'd`USB_XFER_TOKEN_PID_BITS_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_pid_bits_q <= wr_data_q[`USB_XFER_TOKEN_PID_BITS_R];
++
++wire [7:0]  usb_xfer_token_pid_bits_out_w = usb_xfer_token_pid_bits_q;
++
++
++// usb_xfer_token_dev_addr [internal]
++reg [6:0]  usb_xfer_token_dev_addr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_dev_addr_q <= 7'd`USB_XFER_TOKEN_DEV_ADDR_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_dev_addr_q <= wr_data_q[`USB_XFER_TOKEN_DEV_ADDR_R];
++
++wire [6:0]  usb_xfer_token_dev_addr_out_w = usb_xfer_token_dev_addr_q;
++
++
++// usb_xfer_token_ep_addr [internal]
++reg [3:0]  usb_xfer_token_ep_addr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_xfer_token_ep_addr_q <= 4'd`USB_XFER_TOKEN_EP_ADDR_DEFAULT;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_XFER_TOKEN))
++    usb_xfer_token_ep_addr_q <= wr_data_q[`USB_XFER_TOKEN_EP_ADDR_R];
++
++wire [3:0]  usb_xfer_token_ep_addr_out_w = usb_xfer_token_ep_addr_q;
++
++
++//-----------------------------------------------------------------
++// Register usb_rx_stat
++//-----------------------------------------------------------------
++reg usb_rx_stat_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_rx_stat_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_RX_STAT))
++    usb_rx_stat_wr_q <= 1'b1;
++else
++    usb_rx_stat_wr_q <= 1'b0;
++
++
++
++
++
++
++
++//-----------------------------------------------------------------
++// Register usb_wr_data
++//-----------------------------------------------------------------
++wire usb_wr_data_wr_q = write_en_w & (wr_addr_q[7:0] == `USB_WR_DATA);
++
++// usb_wr_data_data [external]
++wire [7:0]  usb_wr_data_data_out_w = wr_data_q[`USB_WR_DATA_DATA_R];
++
++
++//-----------------------------------------------------------------
++// Register usb_rd_data
++//-----------------------------------------------------------------
++reg usb_rd_data_wr_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_rd_data_wr_q <= 1'b0;
++else if (write_en_w && (wr_addr_q[7:0] == `USB_RD_DATA))
++    usb_rd_data_wr_q <= 1'b1;
++else
++    usb_rd_data_wr_q <= 1'b0;
++
++
++wire [15:0]  usb_status_sof_time_in_w;
++wire        usb_status_rx_error_in_w;
++wire [1:0]  usb_status_linestate_bits_in_w;
++wire        usb_irq_sts_device_detect_in_w;
++wire        usb_irq_sts_err_in_w;
++wire        usb_irq_sts_done_in_w;
++wire        usb_irq_sts_sof_in_w;
++wire        usb_rx_stat_start_pend_in_w;
++wire        usb_rx_stat_crc_err_in_w;
++wire        usb_rx_stat_resp_timeout_in_w;
++wire        usb_rx_stat_idle_in_w;
++wire [7:0]  usb_rx_stat_resp_bits_in_w;
++wire [15:0]  usb_rx_stat_count_bits_in_w;
++wire [7:0]  usb_rd_data_data_in_w;
++
++
++//-----------------------------------------------------------------
++// Read mux
++//-----------------------------------------------------------------
++reg [31:0] data_r;
++
++always @ *
++begin
++    data_r = 32'b0;
++
++    case (cfg_araddr_i[7:0])
++
++    `USB_CTRL:
++    begin
++        data_r[`USB_CTRL_PHY_DMPULLDOWN_R] = usb_ctrl_phy_dmpulldown_q;
++        data_r[`USB_CTRL_PHY_DPPULLDOWN_R] = usb_ctrl_phy_dppulldown_q;
++        data_r[`USB_CTRL_PHY_TERMSELECT_R] = usb_ctrl_phy_termselect_q;
++        data_r[`USB_CTRL_PHY_XCVRSELECT_R] = usb_ctrl_phy_xcvrselect_q;
++        data_r[`USB_CTRL_PHY_OPMODE_R] = usb_ctrl_phy_opmode_q;
++        data_r[`USB_CTRL_ENABLE_SOF_R] = usb_ctrl_enable_sof_q;
++    end
++    `USB_STATUS:
++    begin
++        data_r[`USB_STATUS_SOF_TIME_R] = usb_status_sof_time_in_w;
++        data_r[`USB_STATUS_RX_ERROR_R] = usb_status_rx_error_in_w;
++        data_r[`USB_STATUS_LINESTATE_BITS_R] = usb_status_linestate_bits_in_w;
++    end
++    `USB_IRQ_STS:
++    begin
++        data_r[`USB_IRQ_STS_DEVICE_DETECT_R] = usb_irq_sts_device_detect_in_w;
++        data_r[`USB_IRQ_STS_ERR_R] = usb_irq_sts_err_in_w;
++        data_r[`USB_IRQ_STS_DONE_R] = usb_irq_sts_done_in_w;
++        data_r[`USB_IRQ_STS_SOF_R] = usb_irq_sts_sof_in_w;
++    end
++    `USB_IRQ_MASK:
++    begin
++        data_r[`USB_IRQ_MASK_DEVICE_DETECT_R] = usb_irq_mask_device_detect_q;
++        data_r[`USB_IRQ_MASK_ERR_R] = usb_irq_mask_err_q;
++        data_r[`USB_IRQ_MASK_DONE_R] = usb_irq_mask_done_q;
++        data_r[`USB_IRQ_MASK_SOF_R] = usb_irq_mask_sof_q;
++    end
++    `USB_XFER_DATA:
++    begin
++        data_r[`USB_XFER_DATA_TX_LEN_R] = usb_xfer_data_tx_len_q;
++    end
++    `USB_XFER_TOKEN:
++    begin
++        data_r[`USB_XFER_TOKEN_IN_R] = usb_xfer_token_in_q;
++        data_r[`USB_XFER_TOKEN_ACK_R] = usb_xfer_token_ack_q;
++        data_r[`USB_XFER_TOKEN_PID_DATAX_R] = usb_xfer_token_pid_datax_q;
++        data_r[`USB_XFER_TOKEN_PID_BITS_R] = usb_xfer_token_pid_bits_q;
++        data_r[`USB_XFER_TOKEN_DEV_ADDR_R] = usb_xfer_token_dev_addr_q;
++        data_r[`USB_XFER_TOKEN_EP_ADDR_R] = usb_xfer_token_ep_addr_q;
++    end
++    `USB_RX_STAT:
++    begin
++        data_r[`USB_RX_STAT_START_PEND_R] = usb_rx_stat_start_pend_in_w;
++        data_r[`USB_RX_STAT_CRC_ERR_R] = usb_rx_stat_crc_err_in_w;
++        data_r[`USB_RX_STAT_RESP_TIMEOUT_R] = usb_rx_stat_resp_timeout_in_w;
++        data_r[`USB_RX_STAT_IDLE_R] = usb_rx_stat_idle_in_w;
++        data_r[`USB_RX_STAT_RESP_BITS_R] = usb_rx_stat_resp_bits_in_w;
++        data_r[`USB_RX_STAT_COUNT_BITS_R] = usb_rx_stat_count_bits_in_w;
++    end
++    `USB_RD_DATA:
++    begin
++        data_r[`USB_RD_DATA_DATA_R] = usb_rd_data_data_in_w;
++    end
++    default :
++        data_r = 32'b0;
++    endcase
++end
++
++//-----------------------------------------------------------------
++// RVALID
++//-----------------------------------------------------------------
++reg rvalid_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    rvalid_q <= 1'b0;
++else if (read_en_w)
++    rvalid_q <= 1'b1;
++else if (cfg_rready_i)
++    rvalid_q <= 1'b0;
++
++assign cfg_rvalid_o = rvalid_q;
++
++//-----------------------------------------------------------------
++// Retime read response
++//-----------------------------------------------------------------
++reg [31:0] rd_data_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    rd_data_q <= 32'b0;
++else if (!cfg_rvalid_o || cfg_rready_i)
++    rd_data_q <= data_r;
++
++assign cfg_rdata_o = rd_data_q;
++assign cfg_rresp_o = 2'b0;
++
++//-----------------------------------------------------------------
++// BVALID
++//-----------------------------------------------------------------
++reg bvalid_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    bvalid_q <= 1'b0;
++else if (write_en_w)
++    bvalid_q <= 1'b1;
++else if (cfg_bready_i)
++    bvalid_q <= 1'b0;
++
++assign cfg_bvalid_o = bvalid_q;
++assign cfg_bresp_o  = 2'b0;
++
++wire usb_rd_data_rd_req_w = read_en_w & (cfg_araddr_i[7:0] == `USB_RD_DATA);
++
++wire usb_wr_data_wr_req_w = usb_wr_data_wr_q;
++wire usb_rd_data_wr_req_w = usb_rd_data_wr_q;
++
++//-----------------------------------------------------------------
++// Registers / Wires
++//-----------------------------------------------------------------
++// SOF
++reg [10:0]  sof_value_q;
++reg [15:0]  sof_time_q;
++reg         sof_irq_q;
++
++reg         transfer_req_ack_q;
++
++wire [7:0]  fifo_tx_data_w;
++wire        fifo_tx_pop_w;
++
++wire [7:0]  fifo_rx_data_w;
++wire        fifo_rx_push_w;
++
++reg         fifo_flush_q;
++
++wire [7:0]  token_pid_w;
++wire [6:0]  token_dev_w;
++wire [3:0]  token_ep_w;
++
++reg         transfer_start_q;
++reg         in_transfer_q;
++reg         sof_transfer_q;
++reg         resp_expected_q;
++wire        transfer_ack_w;
++
++(* MARK_DEBUG = "TRUE" *)wire        status_crc_err_w;
++(* MARK_DEBUG = "TRUE" *)wire        status_timeout_w;
++wire [7:0]  status_response_w;
++wire [15:0] status_rx_count_w;
++wire        status_sie_idle_w;
++wire        status_tx_done_w;
++wire        status_rx_done_w;
++
++wire        send_sof_w;
++wire        sof_gaurd_band_w;
++wire        clear_to_send_w;
++
++reg         usb_err_q;
++
++(* MARK_DEBUG = "TRUE" *)reg         intr_done_q;
++(* MARK_DEBUG = "TRUE" *)reg         intr_sof_q;
++(* MARK_DEBUG = "TRUE" *)reg         intr_err_q;
++
++//-----------------------------------------------------------------
++// Definitions
++//-----------------------------------------------------------------
++localparam [15:0] SOF_ZERO        = 0;
++localparam [15:0] SOF_INC         = 1;
++localparam [15:0] SOF_THRESHOLD   = 60000-1;
++
++localparam [15:0] CLKS_PER_BIT    = 5;
++
++localparam [15:0] EOF1_THRESHOLD  = (50 * CLKS_PER_BIT); // EOF1 + some margin
++localparam [15:0] MAX_XFER_SIZE   = 64;
++localparam [15:0] MAX_XFER_PERIOD = ((MAX_XFER_SIZE + 6) * 10  * CLKS_PER_BIT); // Max packet transfer time (+ margin)
++localparam [15:0] SOF_GAURD_LOW   = (20 * CLKS_PER_BIT);
++localparam [15:0] SOF_GAURD_HIGH  = SOF_THRESHOLD - EOF1_THRESHOLD - MAX_XFER_PERIOD;
++
++localparam PID_SOF      = 8'hA5;
++
++//-----------------------------------------------------------------
++// SIE
++//-----------------------------------------------------------------
++usbh_sie
++u_sie
++(
++    // Clock & reset
++    .clk_i(clk_i),
++    .rst_i(rst_i),
++
++    // Control
++    .start_i(transfer_start_q),
++    .in_transfer_i(in_transfer_q),
++    .sof_transfer_i(sof_transfer_q),
++    .resp_expected_i(resp_expected_q),    
++    .ack_o(transfer_ack_w),
++
++    // Token packet    
++    .token_pid_i(token_pid_w),
++    .token_dev_i(token_dev_w),
++    .token_ep_i(token_ep_w),
++
++    // Data packet
++    .data_len_i(usb_xfer_data_tx_len_out_w),
++    .data_idx_i(usb_xfer_token_pid_datax_out_w),
++
++    // Tx Data FIFO
++    .tx_data_i(fifo_tx_data_w),
++    .tx_pop_o(fifo_tx_pop_w),
++
++    // Rx Data FIFO
++    .rx_data_o(fifo_rx_data_w),
++    .rx_push_o(fifo_rx_push_w),
++
++    // Status
++    .rx_done_o(status_rx_done_w),
++    .tx_done_o(status_tx_done_w),
++    .crc_err_o(status_crc_err_w),
++    .timeout_o(status_timeout_w),
++    .response_o(status_response_w),
++    .rx_count_o(status_rx_count_w),
++    .idle_o(status_sie_idle_w),
++
++    // UTMI Interface
++    .utmi_data_o(utmi_data_out_o),
++    .utmi_txvalid_o(utmi_txvalid_o),
++    .utmi_txready_i(utmi_txready_i),
++    .utmi_data_i(utmi_data_in_i),
++    .utmi_rxvalid_i(utmi_rxvalid_i),
++    .utmi_rxactive_i(utmi_rxactive_i),
++    .utmi_linestate_i(utmi_linestate_i)
++);    
++
++//-----------------------------------------------------------------
++// Peripheral Interface
++//-----------------------------------------------------------------
++assign usb_status_sof_time_in_w       = sof_time_q;
++assign usb_status_rx_error_in_w       = usb_err_q;
++assign usb_status_linestate_bits_in_w = utmi_linestate_i;
++
++assign usb_irq_sts_err_in_w           = intr_err_q;
++assign usb_irq_sts_done_in_w          = intr_done_q;
++assign usb_irq_sts_sof_in_w           = intr_sof_q;
++
++assign usb_rx_stat_start_pend_in_w    = usb_xfer_token_start_out_w;
++assign usb_rx_stat_crc_err_in_w       = status_crc_err_w;
++assign usb_rx_stat_resp_timeout_in_w  = status_timeout_w;
++assign usb_rx_stat_idle_in_w          = status_sie_idle_w;
++assign usb_rx_stat_resp_bits_in_w     = status_response_w;
++assign usb_rx_stat_count_bits_in_w    = status_rx_count_w;
++
++assign usb_xfer_token_start_ack_in_w  = transfer_req_ack_q;
++
++assign utmi_op_mode_o                 = usb_ctrl_phy_opmode_out_w;
++assign utmi_xcvrselect_o              = usb_ctrl_phy_xcvrselect_out_w;
++assign utmi_termselect_o              = usb_ctrl_phy_termselect_out_w;
++assign utmi_dppulldown_o              = usb_ctrl_phy_dppulldown_out_w;
++assign utmi_dmpulldown_o              = usb_ctrl_phy_dmpulldown_out_w;
++
++//-----------------------------------------------------------------
++// Tx FIFO (Host -> Device)
++//-----------------------------------------------------------------
++usbh_fifo
++u_fifo_tx
++(
++    .clk_i(clk_i),
++    .rst_i(rst_i),
++
++    .data_i(usb_wr_data_data_out_w),
++    .push_i(usb_wr_data_wr_req_w),
++
++    .flush_i(usb_ctrl_tx_flush_out_w),
++
++    .full_o(),
++    .empty_o(),
++
++    .data_o(fifo_tx_data_w),
++    .pop_i(fifo_tx_pop_w)
++);
++
++//-----------------------------------------------------------------
++// Rx FIFO (Device -> Host)
++//-----------------------------------------------------------------
++usbh_fifo
++u_fifo_rx
++(
++    .clk_i(clk_i),
++    .rst_i(rst_i),
++
++    // Receive from UTMI interface
++    .data_i(fifo_rx_data_w),
++    .push_i(fifo_rx_push_w),
++
++    .flush_i(fifo_flush_q),
++
++    .full_o(),
++    .empty_o(),
++
++    .data_o(usb_rd_data_data_in_w),
++    .pop_i(usb_rd_data_rd_req_w)
++);
++
++//-----------------------------------------------------------------
++// Assignments
++//-----------------------------------------------------------------
++assign send_sof_w       = (sof_time_q == SOF_THRESHOLD && usb_ctrl_enable_sof_out_w) & status_sie_idle_w;
++assign sof_gaurd_band_w = (sof_time_q <= SOF_GAURD_LOW || sof_time_q >= SOF_GAURD_HIGH);
++assign clear_to_send_w  = (~sof_gaurd_band_w | ~usb_ctrl_enable_sof_out_w) & status_sie_idle_w;
++
++assign token_pid_w      = sof_transfer_q ? PID_SOF : usb_xfer_token_pid_bits_out_w;
++
++assign token_dev_w      = sof_transfer_q ? 
++                          {sof_value_q[0], sof_value_q[1], sof_value_q[2], 
++                          sof_value_q[3], sof_value_q[4], sof_value_q[5], sof_value_q[6]} :
++                          {usb_xfer_token_dev_addr_out_w[0], usb_xfer_token_dev_addr_out_w[1], usb_xfer_token_dev_addr_out_w[2], usb_xfer_token_dev_addr_out_w[3], usb_xfer_token_dev_addr_out_w[4], usb_xfer_token_dev_addr_out_w[5], usb_xfer_token_dev_addr_out_w[6]};
++
++assign token_ep_w       = sof_transfer_q ? 
++                          {sof_value_q[7], sof_value_q[8], sof_value_q[9], sof_value_q[10]} : 
++                          {usb_xfer_token_ep_addr_out_w[0], usb_xfer_token_ep_addr_out_w[1], usb_xfer_token_ep_addr_out_w[2], usb_xfer_token_ep_addr_out_w[3]};
++
++//-----------------------------------------------------------------
++// Control logic
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++begin
++    fifo_flush_q       <= 1'b0;
++    transfer_start_q   <= 1'b0;
++    sof_transfer_q     <= 1'b0;
++    transfer_req_ack_q <= 1'b0;
++    in_transfer_q      <= 1'b0;
++    resp_expected_q    <= 1'b0;
++end
++else
++begin
++    // Transfer in progress?
++    if (transfer_start_q)
++    begin
++        // Transfer accepted
++        if (transfer_ack_w)
++            transfer_start_q   <= 1'b0;
++
++        fifo_flush_q       <= 1'b0;
++        transfer_req_ack_q <= 1'b0;
++    end
++    // Time to send another SOF token?
++    else if (send_sof_w)
++    begin
++        // Start transfer
++        in_transfer_q     <= 1'b0;
++        resp_expected_q   <= 1'b0;
++        transfer_start_q  <= 1'b1;
++        sof_transfer_q    <= 1'b1;
++    end               
++    // Not in SOF gaurd band region or SOF disabled?
++    else if (clear_to_send_w)
++    begin
++        // Transfer request
++        if (usb_xfer_token_start_out_w)
++        begin              
++            // Flush un-used previous Rx data
++            fifo_flush_q       <= 1'b1;
++
++            // Start transfer
++            in_transfer_q      <= usb_xfer_token_in_out_w;
++            resp_expected_q    <= usb_xfer_token_ack_out_w;
++            transfer_start_q   <= 1'b1;
++            sof_transfer_q     <= 1'b0;
++            transfer_req_ack_q <= 1'b1;
++        end
++    end
++end
++
++//-----------------------------------------------------------------
++// SOF Frame Number
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++begin
++    sof_value_q    <= 11'd0;
++    sof_time_q     <= SOF_ZERO;
++    sof_irq_q      <= 1'b0;
++end
++// Time to send another SOF token?
++else if (send_sof_w)
++begin
++    sof_time_q    <= SOF_ZERO;
++    sof_value_q   <= sof_value_q + 11'd1;
++
++    // Start of frame interrupt
++    sof_irq_q     <= 1'b1;
++end
++else
++begin
++    // Increment the SOF timer
++    if (sof_time_q != SOF_THRESHOLD)
++        sof_time_q <= sof_time_q + SOF_INC;
++
++    sof_irq_q     <= 1'b0;
++end
++
++//-----------------------------------------------------------------
++// Record Errors
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    usb_err_q <= 1'b0;
++// Clear error
++else if (usb_ctrl_wr_q)
++    usb_err_q <= 1'b0;
++// Record bus errors
++else if (utmi_rxerror_i)
++    usb_err_q <= 1'b1;
++
++//-----------------------------------------------------------------
++// Interrupts
++//-----------------------------------------------------------------
++(* MARK_DEBUG = "TRUE" *)reg err_cond_q;
++(* MARK_DEBUG = "TRUE" *)reg intr_q;
++(* MARK_DEBUG = "TRUE" *)reg device_det_q;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++begin
++    intr_done_q   <= 1'b0;
++    intr_sof_q    <= 1'b0;
++    intr_err_q    <= 1'b0;
++    err_cond_q    <= 1'b0;
++    device_det_q  <= 1'b0;
++    intr_q        <= 1'b0;
++end
++else
++begin
++    if (status_rx_done_w || status_tx_done_w)
++        intr_done_q <= 1'b1;
++    else if (usb_irq_ack_done_out_w)
++        intr_done_q <= 1'b0;
++
++    if (sof_irq_q)
++        intr_sof_q  <= 1'b1;
++    else if (usb_irq_ack_sof_out_w)
++        intr_sof_q <= 1'b0;
++
++    if ((status_crc_err_w || status_timeout_w) && (!err_cond_q))
++        intr_err_q <= 1'b1;
++    else if (usb_irq_ack_err_out_w)
++        intr_err_q <= 1'b0;
++
++    // Line state != SE0
++    if (utmi_linestate_i != 2'b0)
++        device_det_q  <= 1'b1;
++    else if (usb_irq_ack_device_detect_out_w)
++        device_det_q <= 1'b0;
++
++    err_cond_q  <= (status_crc_err_w | status_timeout_w);
++
++    intr_q <= (intr_done_q  & usb_irq_mask_done_out_w) |
++              (intr_err_q   & usb_irq_mask_err_out_w)  |
++              (intr_sof_q   & usb_irq_mask_sof_out_w)  |
++              (device_det_q & usb_irq_mask_device_detect_out_w);
++end
++
++assign intr_o = intr_q;
++
++
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_host_defs.v b/IP/APB_DEV/USB/usbh_host_defs.v
+new file mode 100755
+index 0000000..780723c
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_host_defs.v
+@@ -0,0 +1,316 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++
++`define USB_CTRL    8'h0
++
++    `define USB_CTRL_PHY_DMPULLDOWN      7
++    `define USB_CTRL_PHY_DMPULLDOWN_DEFAULT    0
++    `define USB_CTRL_PHY_DMPULLDOWN_B          7
++    `define USB_CTRL_PHY_DMPULLDOWN_T          7
++    `define USB_CTRL_PHY_DMPULLDOWN_W          1
++    `define USB_CTRL_PHY_DMPULLDOWN_R          7:7
++
++    `define USB_CTRL_PHY_DPPULLDOWN      6
++    `define USB_CTRL_PHY_DPPULLDOWN_DEFAULT    0
++    `define USB_CTRL_PHY_DPPULLDOWN_B          6
++    `define USB_CTRL_PHY_DPPULLDOWN_T          6
++    `define USB_CTRL_PHY_DPPULLDOWN_W          1
++    `define USB_CTRL_PHY_DPPULLDOWN_R          6:6
++
++    `define USB_CTRL_PHY_TERMSELECT      5
++    `define USB_CTRL_PHY_TERMSELECT_DEFAULT    0
++    `define USB_CTRL_PHY_TERMSELECT_B          5
++    `define USB_CTRL_PHY_TERMSELECT_T          5
++    `define USB_CTRL_PHY_TERMSELECT_W          1
++    `define USB_CTRL_PHY_TERMSELECT_R          5:5
++
++    `define USB_CTRL_PHY_XCVRSELECT_DEFAULT    0
++    `define USB_CTRL_PHY_XCVRSELECT_B          3
++    `define USB_CTRL_PHY_XCVRSELECT_T          4
++    `define USB_CTRL_PHY_XCVRSELECT_W          2
++    `define USB_CTRL_PHY_XCVRSELECT_R          4:3
++
++    `define USB_CTRL_PHY_OPMODE_DEFAULT    0
++    `define USB_CTRL_PHY_OPMODE_B          1
++    `define USB_CTRL_PHY_OPMODE_T          2
++    `define USB_CTRL_PHY_OPMODE_W          2
++    `define USB_CTRL_PHY_OPMODE_R          2:1
++
++    `define USB_CTRL_ENABLE_SOF      0
++    `define USB_CTRL_ENABLE_SOF_DEFAULT    0
++    `define USB_CTRL_ENABLE_SOF_B          0
++    `define USB_CTRL_ENABLE_SOF_T          0
++    `define USB_CTRL_ENABLE_SOF_W          1
++    `define USB_CTRL_ENABLE_SOF_R          0:0
++
++`define USB_STATUS    8'h4
++
++    `define USB_STATUS_SOF_TIME_DEFAULT    0
++    `define USB_STATUS_SOF_TIME_B          16
++    `define USB_STATUS_SOF_TIME_T          31
++    `define USB_STATUS_SOF_TIME_W          16
++    `define USB_STATUS_SOF_TIME_R          31:16
++
++    `define USB_STATUS_RX_ERROR      2
++    `define USB_STATUS_RX_ERROR_DEFAULT    0
++    `define USB_STATUS_RX_ERROR_B          2
++    `define USB_STATUS_RX_ERROR_T          2
++    `define USB_STATUS_RX_ERROR_W          1
++    `define USB_STATUS_RX_ERROR_R          2:2
++
++    `define USB_STATUS_LINESTATE_BITS_DEFAULT    0
++    `define USB_STATUS_LINESTATE_BITS_B          0
++    `define USB_STATUS_LINESTATE_BITS_T          1
++    `define USB_STATUS_LINESTATE_BITS_W          2
++    `define USB_STATUS_LINESTATE_BITS_R          1:0
++
++`define USB_IRQ_ACK    8'h8
++
++    `define USB_IRQ_ACK_DEVICE_DETECT      3
++    `define USB_IRQ_ACK_DEVICE_DETECT_DEFAULT    0
++    `define USB_IRQ_ACK_DEVICE_DETECT_B          3
++    `define USB_IRQ_ACK_DEVICE_DETECT_T          3
++    `define USB_IRQ_ACK_DEVICE_DETECT_W          1
++    `define USB_IRQ_ACK_DEVICE_DETECT_R          3:3
++
++    `define USB_IRQ_ACK_ERR      2
++    `define USB_IRQ_ACK_ERR_DEFAULT    0
++    `define USB_IRQ_ACK_ERR_B          2
++    `define USB_IRQ_ACK_ERR_T          2
++    `define USB_IRQ_ACK_ERR_W          1
++    `define USB_IRQ_ACK_ERR_R          2:2
++
++    `define USB_IRQ_ACK_DONE      1
++    `define USB_IRQ_ACK_DONE_DEFAULT    0
++    `define USB_IRQ_ACK_DONE_B          1
++    `define USB_IRQ_ACK_DONE_T          1
++    `define USB_IRQ_ACK_DONE_W          1
++    `define USB_IRQ_ACK_DONE_R          1:1
++
++    `define USB_IRQ_ACK_SOF      0
++    `define USB_IRQ_ACK_SOF_DEFAULT    0
++    `define USB_IRQ_ACK_SOF_B          0
++    `define USB_IRQ_ACK_SOF_T          0
++    `define USB_IRQ_ACK_SOF_W          1
++    `define USB_IRQ_ACK_SOF_R          0:0
++
++`define USB_IRQ_STS    8'hc
++
++    `define USB_IRQ_STS_DEVICE_DETECT      3
++    `define USB_IRQ_STS_DEVICE_DETECT_DEFAULT    0
++    `define USB_IRQ_STS_DEVICE_DETECT_B          3
++    `define USB_IRQ_STS_DEVICE_DETECT_T          3
++    `define USB_IRQ_STS_DEVICE_DETECT_W          1
++    `define USB_IRQ_STS_DEVICE_DETECT_R          3:3
++
++    `define USB_IRQ_STS_ERR      2
++    `define USB_IRQ_STS_ERR_DEFAULT    0
++    `define USB_IRQ_STS_ERR_B          2
++    `define USB_IRQ_STS_ERR_T          2
++    `define USB_IRQ_STS_ERR_W          1
++    `define USB_IRQ_STS_ERR_R          2:2
++
++    `define USB_IRQ_STS_DONE      1
++    `define USB_IRQ_STS_DONE_DEFAULT    0
++    `define USB_IRQ_STS_DONE_B          1
++    `define USB_IRQ_STS_DONE_T          1
++    `define USB_IRQ_STS_DONE_W          1
++    `define USB_IRQ_STS_DONE_R          1:1
++
++    `define USB_IRQ_STS_SOF      0
++    `define USB_IRQ_STS_SOF_DEFAULT    0
++    `define USB_IRQ_STS_SOF_B          0
++    `define USB_IRQ_STS_SOF_T          0
++    `define USB_IRQ_STS_SOF_W          1
++    `define USB_IRQ_STS_SOF_R          0:0
++
++`define USB_IRQ_MASK    8'h10
++
++    `define USB_IRQ_MASK_DEVICE_DETECT      3
++    `define USB_IRQ_MASK_DEVICE_DETECT_DEFAULT    0
++    `define USB_IRQ_MASK_DEVICE_DETECT_B          3
++    `define USB_IRQ_MASK_DEVICE_DETECT_T          3
++    `define USB_IRQ_MASK_DEVICE_DETECT_W          1
++    `define USB_IRQ_MASK_DEVICE_DETECT_R          3:3
++
++    `define USB_IRQ_MASK_ERR      2
++    `define USB_IRQ_MASK_ERR_DEFAULT    0
++    `define USB_IRQ_MASK_ERR_B          2
++    `define USB_IRQ_MASK_ERR_T          2
++    `define USB_IRQ_MASK_ERR_W          1
++    `define USB_IRQ_MASK_ERR_R          2:2
++
++    `define USB_IRQ_MASK_DONE      1
++    `define USB_IRQ_MASK_DONE_DEFAULT    0
++    `define USB_IRQ_MASK_DONE_B          1
++    `define USB_IRQ_MASK_DONE_T          1
++    `define USB_IRQ_MASK_DONE_W          1
++    `define USB_IRQ_MASK_DONE_R          1:1
++
++    `define USB_IRQ_MASK_SOF      0
++    `define USB_IRQ_MASK_SOF_DEFAULT    0
++    `define USB_IRQ_MASK_SOF_B          0
++    `define USB_IRQ_MASK_SOF_T          0
++    `define USB_IRQ_MASK_SOF_W          1
++    `define USB_IRQ_MASK_SOF_R          0:0
++
++`define USB_XFER_DATA    8'h14
++
++    `define USB_XFER_DATA_TX_LEN_DEFAULT    0
++    `define USB_XFER_DATA_TX_LEN_B          0
++    `define USB_XFER_DATA_TX_LEN_T          15
++    `define USB_XFER_DATA_TX_LEN_W          16
++    `define USB_XFER_DATA_TX_LEN_R          15:0
++
++`define USB_XFER_TOKEN    8'h18
++
++    `define USB_XFER_TOKEN_START      31
++    `define USB_XFER_TOKEN_START_DEFAULT    0
++    `define USB_XFER_TOKEN_START_B          31
++    `define USB_XFER_TOKEN_START_T          31
++    `define USB_XFER_TOKEN_START_W          1
++    `define USB_XFER_TOKEN_START_R          31:31
++
++    `define USB_XFER_TOKEN_IN      30
++    `define USB_XFER_TOKEN_IN_DEFAULT    0
++    `define USB_XFER_TOKEN_IN_B          30
++    `define USB_XFER_TOKEN_IN_T          30
++    `define USB_XFER_TOKEN_IN_W          1
++    `define USB_XFER_TOKEN_IN_R          30:30
++
++    `define USB_XFER_TOKEN_ACK      29
++    `define USB_XFER_TOKEN_ACK_DEFAULT    0
++    `define USB_XFER_TOKEN_ACK_B          29
++    `define USB_XFER_TOKEN_ACK_T          29
++    `define USB_XFER_TOKEN_ACK_W          1
++    `define USB_XFER_TOKEN_ACK_R          29:29
++
++    `define USB_XFER_TOKEN_PID_DATAX      28
++    `define USB_XFER_TOKEN_PID_DATAX_DEFAULT    0
++    `define USB_XFER_TOKEN_PID_DATAX_B          28
++    `define USB_XFER_TOKEN_PID_DATAX_T          28
++    `define USB_XFER_TOKEN_PID_DATAX_W          1
++    `define USB_XFER_TOKEN_PID_DATAX_R          28:28
++
++    `define USB_XFER_TOKEN_PID_BITS_DEFAULT    0
++    `define USB_XFER_TOKEN_PID_BITS_B          16
++    `define USB_XFER_TOKEN_PID_BITS_T          23
++    `define USB_XFER_TOKEN_PID_BITS_W          8
++    `define USB_XFER_TOKEN_PID_BITS_R          23:16
++
++    `define USB_XFER_TOKEN_DEV_ADDR_DEFAULT    0
++    `define USB_XFER_TOKEN_DEV_ADDR_B          9
++    `define USB_XFER_TOKEN_DEV_ADDR_T          15
++    `define USB_XFER_TOKEN_DEV_ADDR_W          7
++    `define USB_XFER_TOKEN_DEV_ADDR_R          15:9
++
++    `define USB_XFER_TOKEN_EP_ADDR_DEFAULT    0
++    `define USB_XFER_TOKEN_EP_ADDR_B          5
++    `define USB_XFER_TOKEN_EP_ADDR_T          8
++    `define USB_XFER_TOKEN_EP_ADDR_W          4
++    `define USB_XFER_TOKEN_EP_ADDR_R          8:5
++
++`define USB_RX_STAT    8'h1c
++
++    `define USB_RX_STAT_START_PEND      31
++    `define USB_RX_STAT_START_PEND_DEFAULT    0
++    `define USB_RX_STAT_START_PEND_B          31
++    `define USB_RX_STAT_START_PEND_T          31
++    `define USB_RX_STAT_START_PEND_W          1
++    `define USB_RX_STAT_START_PEND_R          31:31
++
++    `define USB_RX_STAT_CRC_ERR      30
++    `define USB_RX_STAT_CRC_ERR_DEFAULT    0
++    `define USB_RX_STAT_CRC_ERR_B          30
++    `define USB_RX_STAT_CRC_ERR_T          30
++    `define USB_RX_STAT_CRC_ERR_W          1
++    `define USB_RX_STAT_CRC_ERR_R          30:30
++
++    `define USB_RX_STAT_RESP_TIMEOUT      29
++    `define USB_RX_STAT_RESP_TIMEOUT_DEFAULT    0
++    `define USB_RX_STAT_RESP_TIMEOUT_B          29
++    `define USB_RX_STAT_RESP_TIMEOUT_T          29
++    `define USB_RX_STAT_RESP_TIMEOUT_W          1
++    `define USB_RX_STAT_RESP_TIMEOUT_R          29:29
++
++    `define USB_RX_STAT_IDLE      28
++    `define USB_RX_STAT_IDLE_DEFAULT    0
++    `define USB_RX_STAT_IDLE_B          28
++    `define USB_RX_STAT_IDLE_T          28
++    `define USB_RX_STAT_IDLE_W          1
++    `define USB_RX_STAT_IDLE_R          28:28
++
++    `define USB_RX_STAT_RESP_BITS_DEFAULT    0
++    `define USB_RX_STAT_RESP_BITS_B          16
++    `define USB_RX_STAT_RESP_BITS_T          23
++    `define USB_RX_STAT_RESP_BITS_W          8
++    `define USB_RX_STAT_RESP_BITS_R          23:16
++
++    `define USB_RX_STAT_COUNT_BITS_DEFAULT    0
++    `define USB_RX_STAT_COUNT_BITS_B          0
++    `define USB_RX_STAT_COUNT_BITS_T          15
++    `define USB_RX_STAT_COUNT_BITS_W          16
++    `define USB_RX_STAT_COUNT_BITS_R          15:0
++
++`define USB_WR_DATA    8'h20
++
++    `define USB_WR_DATA_DATA_DEFAULT    0
++    `define USB_WR_DATA_DATA_B          0
++    `define USB_WR_DATA_DATA_T          7
++    `define USB_WR_DATA_DATA_W          8
++    `define USB_WR_DATA_DATA_R          7:0
++
++`define USB_RD_DATA    8'h20
++
++    `define USB_RD_DATA_DATA_DEFAULT    0
++    `define USB_RD_DATA_DATA_B          0
++    `define USB_RD_DATA_DATA_T          7
++    `define USB_RD_DATA_DATA_W          8
++    `define USB_RD_DATA_DATA_R          7:0
++
++`define USB_CTRL2    8'h24
++
++    `define USB_CTRL2_TX_FLUSH      1
++    `define USB_CTRL2_TX_FLUSH_DEFAULT    0
++    `define USB_CTRL2_TX_FLUSH_B          1
++    `define USB_CTRL2_TX_FLUSH_T          1
++    `define USB_CTRL2_TX_FLUSH_W          1
++    `define USB_CTRL2_TX_FLUSH_R          1:1
++
++    `define USB_CTRL2_PHY_RESET      1
++    `define USB_CTRL2_PHY_RESET_DEFAULT    0
++    `define USB_CTRL2_PHY_RESET_B          0
++    `define USB_CTRL2_PHY_RESET_T          0
++    `define USB_CTRL2_PHY_RESET_W          1
++    `define USB_CTRL2_PHY_RESET_R          0:0
+diff --git a/IP/APB_DEV/USB/usbh_sie.v b/IP/APB_DEV/USB/usbh_sie.v
+new file mode 100755
+index 0000000..90658c3
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_sie.v
+@@ -0,0 +1,817 @@
++//-----------------------------------------------------------------
++//                     USB Full Speed Host
++//                           V0.5
++//                     Ultra-Embedded.com
++//                     Copyright 2015-2019
++//
++//                 Email: admin@ultra-embedded.com
++//
++//                         License: GPL
++// If you would like a version with a more permissive license for
++// use in closed source commercial applications please contact me
++// for details.
++//-----------------------------------------------------------------
++//
++// This file is open source HDL; you can redistribute it and/or 
++// modify it under the terms of the GNU General Public License as 
++// published by the Free Software Foundation; either version 2 of 
++// the License, or (at your option) any later version.
++//
++// This file is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++//
++// You should have received a copy of the GNU General Public 
++// License along with this file; if not, write to the Free Software
++// Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
++// USA
++//-----------------------------------------------------------------
++
++//-----------------------------------------------------------------
++//                          Generated File
++//-----------------------------------------------------------------
++
++module usbh_sie
++(
++    // Inputs
++     input           clk_i
++    ,input           rst_i
++    ,input           start_i
++    ,input           in_transfer_i
++    ,input           sof_transfer_i
++    ,input           resp_expected_i
++    ,input  [  7:0]  token_pid_i
++    ,input  [  6:0]  token_dev_i
++    ,input  [  3:0]  token_ep_i
++    ,input  [ 15:0]  data_len_i
++    ,input           data_idx_i
++    ,input  [  7:0]  tx_data_i
++    ,(* MARK_DEBUG="true" *)input           utmi_txready_i
++    ,input  [  7:0]  utmi_data_i
++    ,input           utmi_rxvalid_i
++    ,input           utmi_rxactive_i
++    ,input  [  1:0]  utmi_linestate_i
++
++    // Outputs
++    ,output          ack_o
++    ,output          tx_pop_o
++    ,output [  7:0]  rx_data_o
++    ,output          rx_push_o
++    ,output          tx_done_o
++    ,output          rx_done_o
++    ,output          crc_err_o
++    ,output          timeout_o
++    ,output [  7:0]  response_o
++    ,output [ 15:0]  rx_count_o
++    ,output          idle_o
++    ,output [  7:0]  utmi_data_o
++    ,(* MARK_DEBUG="true" *)output          utmi_txvalid_o
++);
++
++
++
++//-----------------------------------------------------------------
++// Registers / Wires
++//-----------------------------------------------------------------
++reg                 start_ack_q;
++
++// Status
++reg                 status_tx_done_q;
++reg                 status_rx_done_q;
++reg                 status_crc_err_q;
++reg                 status_timeout_q;
++reg [7:0]           status_response_q;
++
++reg [15:0]          byte_count_q;
++reg                 in_transfer_q;
++
++reg [3:0]           rx_time_q;
++reg                 rx_time_en_q;
++reg [9:0]           last_tx_time_q;
++
++reg                 send_data1_q;
++reg                 send_sof_q;
++reg                 send_ack_q;
++
++// CRC16
++reg [15:0]          crc_sum_q;
++wire [15:0]         crc_out_w;
++wire [7:0]          crc_data_in_w;
++
++// CRC5
++wire [4:0]          crc5_out_w;
++wire [4:0]          crc5_next_w = crc5_out_w ^ 5'h1F;
++
++reg [15:0]          token_q;
++
++reg                 wait_resp_q;
++
++(* MARK_DEBUG="true" *)reg [3:0]           state_q;
++
++//-----------------------------------------------------------------
++// Definitions
++//-----------------------------------------------------------------
++localparam RX_TIMEOUT       = 10'd511; // ~5uS @ 60MHz
++localparam TX_IFS           = 10'd10; // 2+2 FS bit times (x5 CLKs @ 60MHz, x4 CLKs @ 48MHz)
++
++localparam PID_OUT          = 8'hE1;
++localparam PID_IN           = 8'h69;
++localparam PID_SOF          = 8'hA5;
++localparam PID_SETUP        = 8'h2D;
++
++localparam PID_DATA0        = 8'hC3;
++localparam PID_DATA1        = 8'h4B;
++
++localparam PID_ACK          = 8'hD2;
++localparam PID_NAK          = 8'h5A;
++localparam PID_STALL        = 8'h1E;
++
++// States
++localparam STATE_IDLE       = 4'd0;
++localparam STATE_RX_DATA    = 4'd1;
++localparam STATE_TX_PID     = 4'd2;
++localparam STATE_TX_DATA    = 4'd3;
++localparam STATE_TX_CRC1    = 4'd4;
++localparam STATE_TX_CRC2    = 4'd5;
++localparam STATE_TX_TOKEN1  = 4'd6;
++localparam STATE_TX_TOKEN2  = 4'd7;
++localparam STATE_TX_TOKEN3  = 4'd8;
++localparam STATE_TX_ACKNAK  = 4'd9;
++localparam STATE_TX_WAIT    = 4'd10;
++localparam STATE_RX_WAIT    = 4'd11;
++localparam STATE_TX_IFS     = 4'd12;
++localparam STATE_TX_WAIT_EOP= 4'd13;
++localparam STATE_RX_WAIT_EOP= 4'd14;
++
++localparam RX_TIME_ZERO     = 4'd0;
++localparam RX_TIME_INC      = 4'd1;
++localparam RX_TIME_READY    = 4'd9; // 2-bit times at 60 MHz
++
++//-----------------------------------------------------------------
++// Wires
++//-----------------------------------------------------------------
++// Rx data
++wire [7:0] rx_data_w;
++wire       data_ready_w;
++wire       crc_byte_w;
++wire       rx_active_w;
++
++// 2-bit times after last RX (inter-packet delay)?
++wire autoresp_thresh_w = send_ack_q & rx_time_en_q & (rx_time_q == RX_TIME_READY);
++
++// Response timeout (no response after 500uS from transmit)
++wire rx_resp_timeout_w = (last_tx_time_q >= RX_TIMEOUT) & wait_resp_q;
++
++// Tx - Tx IFS timeout
++wire tx_ifs_ready_w    = (last_tx_time_q >= TX_IFS);
++
++// CRC16 error on received data
++wire crc_error_w = (state_q == STATE_RX_DATA) && !rx_active_w && in_transfer_q        &&
++                   (status_response_q == PID_DATA0 || status_response_q == PID_DATA1) &&
++                   (crc_sum_q != 16'h800D);
++
++//-----------------------------------------------------------------
++// State Machine
++//-----------------------------------------------------------------
++reg [3:0] next_state_r;
++
++always @ *
++begin
++    next_state_r = state_q;
++        
++    //-----------------------------------------
++    // Tx State Machine
++    //-----------------------------------------
++    case (state_q)
++
++        //-----------------------------------------
++        // TX_TOKEN1 (byte 1 of token)
++        //-----------------------------------------
++        STATE_TX_TOKEN1 :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++                next_state_r = STATE_TX_TOKEN2;
++        end
++        //-----------------------------------------
++        // TX_TOKEN2 (byte 2 of token)
++        //-----------------------------------------
++        STATE_TX_TOKEN2 :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++                next_state_r = STATE_TX_TOKEN3;        
++        end
++        //-----------------------------------------
++        // TX_TOKEN3 (byte 3 of token)
++        //-----------------------------------------
++        STATE_TX_TOKEN3 :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++            begin
++                // SOF - no data packet
++                if (send_sof_q)
++                    next_state_r = STATE_TX_WAIT_EOP;
++                // IN - wait for data
++                else if (in_transfer_q)
++                    next_state_r = STATE_RX_WAIT_EOP;
++                // OUT/SETUP - Send data or ZLP
++                else
++                    next_state_r = STATE_TX_WAIT_EOP;
++            end
++        end
++        //-----------------------------------------
++        // TX_WAIT_EOP
++        //-----------------------------------------
++        STATE_TX_WAIT_EOP :
++        begin
++            // EOP sent
++            if (utmi_linestate_i == 2'b0)
++            begin
++                next_state_r = STATE_TX_IFS;
++            end
++        end
++        //-----------------------------------------
++        // TX_IFS
++        //-----------------------------------------
++        STATE_TX_IFS :
++        begin
++            // IFS expired
++            if (tx_ifs_ready_w)
++            begin
++                // SOF - no data packet
++                if (send_sof_q)
++                    next_state_r = STATE_IDLE;
++                // OUT/SETUP - Send data or ZLP
++                else
++                    next_state_r = STATE_TX_PID;
++            end
++        end
++        //-----------------------------------------
++        // TX_PID
++        //-----------------------------------------
++        STATE_TX_PID :
++        begin
++            // Last data byte sent?
++            if (utmi_txready_i && (byte_count_q == 16'b0))
++                next_state_r = STATE_TX_CRC1;
++            else if (utmi_txready_i)
++                next_state_r = STATE_TX_DATA;
++        end
++        //-----------------------------------------
++        // TX_DATA
++        //-----------------------------------------
++        STATE_TX_DATA :
++        begin
++            // Last data byte sent?
++            if (utmi_txready_i && (byte_count_q == 16'b0))
++                next_state_r = STATE_TX_CRC1;
++        end
++        //-----------------------------------------
++        // TX_CRC1 (first byte)
++        //-----------------------------------------
++        STATE_TX_CRC1 :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++                next_state_r = STATE_TX_CRC2;
++        end
++        //-----------------------------------------
++        // TX_CRC (second byte)
++        //-----------------------------------------
++        STATE_TX_CRC2 :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++            begin
++               // If a response is expected
++               if (wait_resp_q)
++                  next_state_r = STATE_RX_WAIT_EOP;
++                // No response expected (e.g ISO transfer)
++               else
++                  next_state_r = STATE_IDLE;                
++            end
++        end
++        //-----------------------------------------
++        // STATE_TX_WAIT
++        //-----------------------------------------
++        STATE_TX_WAIT :
++        begin
++            // Waited long enough?
++            if (autoresp_thresh_w)
++                next_state_r = STATE_TX_ACKNAK;
++        end        
++        //-----------------------------------------
++        // STATE_TX_ACKNAK
++        //-----------------------------------------
++        STATE_TX_ACKNAK :
++        begin
++            // Data sent?
++            if (utmi_txready_i)
++                next_state_r = STATE_IDLE;
++        end
++        //-----------------------------------------
++        // STATE_RX_WAIT_EOP
++        //-----------------------------------------
++        STATE_RX_WAIT_EOP :
++        begin
++           // EOP sent?
++           if (utmi_linestate_i == 2'b0)
++              next_state_r = STATE_RX_WAIT;
++        end
++        //-----------------------------------------
++        // STATE_RX_WAIT
++        //-----------------------------------------
++        STATE_RX_WAIT :
++        begin
++           // Data received?
++           if (data_ready_w)
++              next_state_r = STATE_RX_DATA;
++            // Waited long enough?
++           else if (rx_resp_timeout_w)
++              next_state_r = STATE_IDLE;
++        end
++        //-----------------------------------------
++        // RX_DATA
++        //-----------------------------------------
++        STATE_RX_DATA :
++        begin
++            // Receive complete
++            if (~rx_active_w)
++            begin
++                // Send ACK but incoming data had CRC error, do not ACK
++                if (send_ack_q && crc_error_w)
++                    next_state_r = STATE_IDLE;
++                // Send an ACK response without CPU interaction?
++                else if (send_ack_q && (status_response_q == PID_DATA0 || status_response_q == PID_DATA1))
++                    next_state_r = STATE_TX_WAIT;
++                else
++                    next_state_r = STATE_IDLE;
++            end
++        end
++        //-----------------------------------------
++        // IDLE / RECEIVE BEGIN
++        //-----------------------------------------
++        STATE_IDLE :
++        begin
++           // Token transfer request
++           if (start_i)
++              next_state_r  = STATE_TX_TOKEN1;
++        end
++        default :
++           ;
++    endcase
++end
++
++// Update state
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    state_q   <= STATE_IDLE;
++else
++    state_q   <= next_state_r;
++
++//-----------------------------------------------------------------
++// Tx Token
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    token_q         <= 16'h0000;
++else if (state_q == STATE_IDLE)
++    token_q         <= {token_dev_i, token_ep_i, 5'b0};
++// PID of token sent, capture calculated CRC for token packet
++else if (state_q == STATE_TX_TOKEN1 && utmi_txready_i)
++    token_q[4:0]    <= crc5_next_w;
++
++//-----------------------------------------------------------------
++// Tx Timer
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    last_tx_time_q <= 10'd0;
++// Start counting from last Tx
++else if (state_q == STATE_IDLE || state_q == STATE_TX_WAIT_EOP || state_q == STATE_RX_WAIT_EOP || (utmi_txvalid_o && utmi_txready_i))
++    last_tx_time_q <= 10'd0;
++// Increment the Tx timeout
++else if (last_tx_time_q != RX_TIMEOUT)
++    last_tx_time_q <= last_tx_time_q + 10'd1;
++
++//-----------------------------------------------------------------
++// Transmit / Receive counter
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    byte_count_q <= 16'h0000;
++// New transfer request (not automatic SOF request)
++else if (state_q == STATE_IDLE && start_i && !sof_transfer_i)
++    byte_count_q <= data_len_i;
++else if (state_q == STATE_RX_WAIT)
++    byte_count_q <= 16'h0000;
++// Transmit byte
++else if ((state_q == STATE_TX_PID || state_q == STATE_TX_DATA) && utmi_txready_i)
++begin
++    // Count down data left to send
++    if (byte_count_q != 16'd0)
++        byte_count_q <= byte_count_q - 16'd1;
++end
++// Received byte
++else if (state_q == STATE_RX_DATA && data_ready_w && !crc_byte_w)
++    byte_count_q <= byte_count_q + 16'd1;
++
++//-----------------------------------------------------------------
++// Transfer start ack
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    start_ack_q  <= 1'b0;
++// First byte of PID sent, ack transfer request
++else if (state_q == STATE_TX_TOKEN1 && utmi_txready_i)
++    start_ack_q  <= 1'b1;
++else
++    start_ack_q  <= 1'b0;
++
++//-----------------------------------------------------------------
++// Record request details
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++begin
++    in_transfer_q   <= 1'b0;
++    send_ack_q      <= 1'b0;
++    send_data1_q    <= 1'b0;
++    send_sof_q      <= 1'b0;
++end
++// Start of new request
++else if (state_q == STATE_IDLE && start_i)
++begin
++    // Transfer request
++    // e.g. (H)SOF                                   [sof_transfer_i]
++    //      (H)OUT + (H)DATA + (F)ACK/NACK/STALL     [data_len_i >= 0 && !in_transfer_i]
++    //      (H)IN  + (F)DATA + (H)ACK                [in_transfer_i]
++    //      (H)IN  + (F)NAK/STALL                    [in_transfer_i]
++    in_transfer_q   <= in_transfer_i;
++
++    // Send ACK in response to IN DATA
++    send_ack_q      <= in_transfer_i && resp_expected_i;
++
++    // DATA0/1
++    send_data1_q    <= data_idx_i;
++
++    send_sof_q      <= sof_transfer_i;
++end
++
++//-----------------------------------------------------------------
++// Response delay timer
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++begin
++    rx_time_q       <= RX_TIME_ZERO;
++    rx_time_en_q    <= 1'b0;
++end
++else if (state_q == STATE_IDLE)
++begin
++    rx_time_q       <= RX_TIME_ZERO;
++    rx_time_en_q    <= 1'b0;
++end
++// Receive complete
++else if (state_q == STATE_RX_DATA && !utmi_rxactive_i)
++begin
++    // Reset time since end of last data byte
++    rx_time_q       <= RX_TIME_ZERO;
++    rx_time_en_q    <= 1'b1;
++end
++// Increment timer if enabled (and less than the threshold)
++else if (rx_time_en_q && rx_time_q != RX_TIME_READY)
++    rx_time_q       <= rx_time_q + RX_TIME_INC;
++
++// Response expected
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    wait_resp_q <= 1'b0;
++// Incoming data
++else if (state_q == STATE_RX_WAIT && data_ready_w)
++    wait_resp_q <= 1'b0;
++else if (state_q == STATE_IDLE && start_i)
++    wait_resp_q <= resp_expected_i;
++
++//-----------------------------------------------------------------
++// Status
++//-----------------------------------------------------------------
++always @ (posedge clk_i or posedge rst_i)
++begin
++   if (rst_i)
++   begin
++       status_response_q    <= 8'h00;
++       status_timeout_q     <= 1'b0;
++       status_rx_done_q     <= 1'b0;
++       status_tx_done_q     <= 1'b0;
++   end
++   else
++   begin
++        case (state_q)
++
++        //-----------------------------------------
++        // RX_WAIT
++        //-----------------------------------------
++        STATE_RX_WAIT :
++        begin
++           // Store response PID
++           if (data_ready_w)
++               status_response_q   <= rx_data_w;
++
++           // Waited long enough?
++           if (rx_resp_timeout_w)
++               status_timeout_q    <= 1'b1;
++
++            status_tx_done_q     <= 1'b0;
++        end
++        //-----------------------------------------
++        // RX_DATA
++        //-----------------------------------------
++        STATE_RX_DATA :
++        begin
++           // Receive complete
++           if (!utmi_rxactive_i)
++                status_rx_done_q   <= 1'b1;
++           else
++                status_rx_done_q   <= 1'b0;
++        end
++        //-----------------------------------------
++        // TX_CRC (second byte)
++        //-----------------------------------------
++        STATE_TX_CRC2 :
++        begin
++            // Data sent?
++            if (utmi_txready_i && !wait_resp_q)
++            begin
++                // Transfer now complete
++                status_tx_done_q    <= 1'b1;
++            end
++        end
++        //-----------------------------------------
++        // IDLE / RECEIVE BEGIN
++        //-----------------------------------------
++        STATE_IDLE :
++        begin
++            // Transfer request
++            // e.g. (H)SOF                                   [sof_transfer_i]
++            //      (H)OUT + (H)DATA + (F)ACK/NACK/STALL     [data_len_i >= 0 && !in_transfer_i]
++            //      (H)IN  + (F)DATA + (H)ACK                [in_transfer_i]
++            //      (H)IN  + (F)NAK/STALL                    [in_transfer_i]
++            if (start_i && !sof_transfer_i) // (not automatic SOF request)
++            begin
++                // Clear status
++                status_response_q       <= 8'h00;
++                status_timeout_q        <= 1'b0;
++            end
++
++            status_rx_done_q     <= 1'b0;
++            status_tx_done_q     <= 1'b0;
++        end
++        //-----------------------------------------
++        // DEFAULT
++        //-----------------------------------------        
++        default :
++        begin
++            status_rx_done_q     <= 1'b0;
++            status_tx_done_q     <= 1'b0;
++        end
++       endcase
++   end
++end
++
++
++//-----------------------------------------------------------------
++// Data delay (to strip the CRC16 trailing bytes)
++//-----------------------------------------------------------------
++reg [31:0] data_buffer_q;
++reg [3:0]  data_valid_q;
++reg [3:0]  rx_active_q;
++
++wire shift_en_w = (utmi_rxvalid_i & utmi_rxactive_i) || !utmi_rxactive_i;
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    data_buffer_q <= 32'b0;
++else if (shift_en_w)
++    data_buffer_q <= {utmi_data_i, data_buffer_q[31:8]};
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    data_valid_q <= 4'b0;
++else if (shift_en_w)
++    data_valid_q <= {(utmi_rxvalid_i & utmi_rxactive_i), data_valid_q[3:1]};
++else
++    data_valid_q <= {data_valid_q[3:1], 1'b0};
++
++reg [1:0] data_crc_q;
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    data_crc_q <= 2'b0;
++else if (shift_en_w)
++    data_crc_q <= {!utmi_rxactive_i, data_crc_q[1]};
++
++always @ (posedge clk_i or posedge rst_i)
++if (rst_i)
++    rx_active_q <= 4'b0;
++else
++    rx_active_q <= {utmi_rxactive_i, rx_active_q[3:1]};
++
++assign rx_data_w    = data_buffer_q[7:0];
++assign data_ready_w = data_valid_q[0];
++assign crc_byte_w   = data_crc_q[0];
++assign rx_active_w  = rx_active_q[0];
++
++//-----------------------------------------------------------------
++// CRC
++//-----------------------------------------------------------------
++
++// CRC16 (Data)
++usbh_crc16
++u_crc16
++(
++    .crc_i(crc_sum_q),
++    .data_i(crc_data_in_w),
++    .crc_o(crc_out_w)
++);
++
++// CRC5 (Token)
++usbh_crc5
++u_crc5
++(
++    .crc_i(5'h1F),
++    .data_i(token_q[15:5]),
++    .crc_o(crc5_out_w)
++);
++
++// CRC control / check
++always @ (posedge clk_i or posedge rst_i)
++begin
++   if (rst_i)
++   begin
++       crc_sum_q          <= 16'hFFFF;
++       status_crc_err_q   <= 1'b0;
++   end
++   else
++   begin
++        case (state_q)
++            //-----------------------------------------
++            // TX_PID
++            //-----------------------------------------
++            STATE_TX_PID :
++            begin
++                // First byte is PID (not CRC'd), reset CRC16
++                crc_sum_q      <= 16'hFFFF;
++            end        
++            //-----------------------------------------
++            // TX_DATA
++            //-----------------------------------------
++            STATE_TX_DATA :
++            begin
++                // Data sent?
++                if (utmi_txready_i)
++                begin
++                    // Next CRC start value
++                    crc_sum_q      <= crc_out_w;
++                end
++            end
++            //-----------------------------------------
++            // RX_WAIT
++            //-----------------------------------------
++            STATE_RX_WAIT :
++            begin
++                // Reset CRC16
++                crc_sum_q   <= 16'hFFFF;
++            end            
++            //-----------------------------------------
++            // RX_DATA
++            //-----------------------------------------
++            STATE_RX_DATA :
++            begin
++               // Data received?
++               if (data_ready_w)
++               begin
++                   // Next CRC start value
++                   crc_sum_q          <= crc_out_w;
++               end
++               // Receive complete
++               else if (!rx_active_w)
++               begin
++                    // If some data received, check CRC
++                    if (crc_error_w)
++                        status_crc_err_q   <= 1'b1;
++                    else
++                        status_crc_err_q   <= 1'b0;
++               end
++            end
++
++            //-----------------------------------------
++            // IDLE / RECEIVE BEGIN
++            //-----------------------------------------
++            STATE_IDLE :
++            begin
++               // Start transfer request
++               if (start_i && !sof_transfer_i)
++               begin
++                  // Clear error flag!
++                  status_crc_err_q  <= 1'b0;
++               end
++            end
++           default :
++               ;
++        endcase
++   end
++end
++
++//-----------------------------------------------------------------
++// Assignments
++//-----------------------------------------------------------------
++wire [15:0] token_rev_w;
++
++genvar i;
++generate
++for (i=0; i < 16; i=i+1) 
++begin : LOOP
++    assign token_rev_w[i] = token_q[15-i];
++end
++endgenerate
++
++reg       utmi_txvalid_r;
++reg [7:0] utmi_data_r;
++
++always @ *
++begin
++    if (state_q == STATE_TX_CRC1)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = {~crc_sum_q[8], ~crc_sum_q[9], ~crc_sum_q[10], ~crc_sum_q[11], ~crc_sum_q[12], ~crc_sum_q[13], ~crc_sum_q[14], ~crc_sum_q[15]};
++    end
++    else if (state_q == STATE_TX_CRC2)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = {~crc_sum_q[0], ~crc_sum_q[1], ~crc_sum_q[2], ~crc_sum_q[3], ~crc_sum_q[4], ~crc_sum_q[5], ~crc_sum_q[6], ~crc_sum_q[7]};
++    end
++    else if (state_q == STATE_TX_TOKEN1)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = token_pid_i;
++    end
++    else if (state_q == STATE_TX_TOKEN2)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = token_rev_w[7:0];
++    end
++    else if (state_q == STATE_TX_TOKEN3)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = token_rev_w[15:8];
++    end
++    else if (state_q == STATE_TX_PID)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = send_data1_q ? PID_DATA1 : PID_DATA0;
++    end
++    else if (state_q == STATE_TX_ACKNAK)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = PID_ACK;
++    end
++    else if (state_q == STATE_TX_DATA)
++    begin
++        utmi_txvalid_r = 1'b1;
++        utmi_data_r    = tx_data_i;
++    end
++    else
++    begin
++        utmi_txvalid_r = 1'b0;
++        utmi_data_r    = 8'b0;
++    end
++end
++
++assign utmi_txvalid_o = utmi_txvalid_r;
++assign utmi_data_o    = utmi_data_r;
++
++// Push incoming data into FIFO (not PID or CRC)
++assign rx_data_o    = rx_data_w;
++assign rx_push_o    = (state_q != STATE_IDLE && state_q != STATE_RX_WAIT) & data_ready_w & !crc_byte_w;
++
++assign crc_data_in_w = (state_q == STATE_RX_DATA) ? rx_data_w : tx_data_i;
++
++assign rx_count_o   = byte_count_q;
++assign idle_o       = (state_q == STATE_IDLE);
++
++assign ack_o        = start_ack_q;
++
++assign tx_pop_o     = state_q == STATE_TX_DATA && utmi_txready_i;
++
++assign tx_done_o    = status_tx_done_q;
++assign rx_done_o    = status_rx_done_q;
++assign crc_err_o    = status_crc_err_q;
++assign timeout_o    = status_timeout_q;
++assign response_o   = status_response_q;
++
++
++
++endmodule
+diff --git a/IP/APB_DEV/USB/usbh_top.v b/IP/APB_DEV/USB/usbh_top.v
+new file mode 100755
+index 0000000..96664b1
+--- /dev/null
++++ b/IP/APB_DEV/USB/usbh_top.v
+@@ -0,0 +1,128 @@
++`timescale 1ns / 1ps
++//////////////////////////////////////////////////////////////////////////////////
++// Company: 
++// Engineer: 
++// 
++// Create Date: 07/14/2019 03:23:49 PM
++// Design Name: 
++// Module Name: usbh_top
++// Project Name: 
++// Target Devices: 
++// Tool Versions: 
++// Description: 
++// 
++// Dependencies: 
++// 
++// Revision:
++// Revision 0.01 - File Created
++// Additional Comments:
++// 
++//////////////////////////////////////////////////////////////////////////////////
++
++
++module usbh_top(
++    // UTMI clock = AXI clock
++    input aclk,
++    input aresetn,
++    output intr,
++
++    input cfg_awvalid,
++    input [31:0] cfg_awaddr,
++    input cfg_wvalid,
++    input [31:0] cfg_wdata,
++    input [3:0] cfg_wstrb,
++    input cfg_bready,
++    input cfg_arvalid,
++    input [31:0] cfg_araddr,
++    input cfg_rready,
++
++    output cfg_awready,
++    output cfg_wready,
++    output cfg_bvalid,
++    output [1:0] cfg_bresp,
++    output cfg_arready,
++    output cfg_rvalid,
++    output [31:0] cfg_rdata,
++    output [1:0] cfg_rresp,
++
++    //inout [7:0] utmi_data,
++    input [7:0] utmi_data_in,
++    output [7:0] utmi_data_out,
++    output utmi_data_t,
++    output utmi_reset,
++
++    input utmi_txready,
++    input utmi_rxvalid,
++    input utmi_rxactive,
++    input utmi_rxerror,
++    input [1:0] utmi_linestate,
++    
++    output utmi_txvalid,
++    output [1:0] utmi_opmode,
++    output [1:0] utmi_xcvrsel,
++    output utmi_termsel,
++    output utmi_dppulldown,
++    output utmi_dmpulldown,
++
++    // 0
++    output utmi_idpullup,
++    output utmi_chrgvbus,
++    output utmi_dischrgvbus,
++    output utmi_suspend_n,
++
++    // ignore
++    input utmi_hostdisc,
++    input utmi_iddig,
++    input utmi_vbusvalid,
++    input utmi_sessend
++    );
++
++    assign utmi_idpullup = 0;
++    assign utmi_chrgvbus = 0;
++    assign utmi_dischrgvbus = 0;
++    assign utmi_suspend_n = 1;
++    assign utmi_data_t = !utmi_txvalid;
++
++    usbh_host usb_host_inst(
++        .clk_i(aclk),
++        .rst_i(!aresetn),
++
++        .cfg_awvalid_i(cfg_awvalid),
++        .cfg_awaddr_i(cfg_awaddr),
++        .cfg_wvalid_i(cfg_wvalid),
++        .cfg_wdata_i(cfg_wdata),
++        .cfg_wstrb_i(cfg_wstrb),
++        .cfg_bready_i(cfg_bready),
++        .cfg_arvalid_i(cfg_arvalid),
++        .cfg_araddr_i(cfg_araddr),
++        .cfg_rready_i(cfg_rready),
++
++        .cfg_awready_o(cfg_awready),
++        .cfg_wready_o(cfg_wready),
++        .cfg_bvalid_o(cfg_bvalid),
++        .cfg_bresp_o(cfg_bresp),
++        .cfg_arready_o(cfg_arready),
++        .cfg_rvalid_o(cfg_rvalid),
++        .cfg_rdata_o(cfg_rdata),
++        .cfg_rresp_o(cfg_rresp),
++        
++        .intr_o(intr),
++
++        .utmi_data_in_i(utmi_data_in),
++        .utmi_txready_i(utmi_txready),
++        .utmi_rxvalid_i(utmi_rxvalid),
++        .utmi_rxactive_i(utmi_rxactive),
++        .utmi_rxerror_i(utmi_rxerror),
++        .utmi_linestate_i(utmi_linestate),
++
++        .utmi_data_out_o(utmi_data_out),
++        .utmi_txvalid_o(utmi_txvalid),
++        .utmi_op_mode_o(utmi_opmode),
++        .utmi_xcvrselect_o(utmi_xcvrsel),
++        .utmi_termselect_o(utmi_termsel),
++        .utmi_dppulldown_o(utmi_dppulldown),
++        .utmi_dmpulldown_o(utmi_dmpulldown),
++	.utmi_reset_o(utmi_reset)
++    );
++
++endmodule
+diff --git a/IP/APB_DEV/apb_dev_top_with_nand.v b/IP/APB_DEV/apb_dev_top_with_nand.v
+index 865c619..b71c7e9 100644
+--- a/IP/APB_DEV/apb_dev_top_with_nand.v
++++ b/IP/APB_DEV/apb_dev_top_with_nand.v
+@@ -104,6 +104,7 @@ uart0_ri_i,
+ uart0_int,
+ nand_int,
+ ps2_int,
++usb_int,
+ 
+ ps2_clk_i,
+ ps2_clk_o,
+@@ -112,6 +113,32 @@ ps2_dat_i,
+ ps2_dat_o,
+ ps2_dat_t,
+ 
++usb_clk,
++usb_resetn,
++utmi_data_in,
++utmi_data_out,
++utmi_data_t,
++utmi_reset,
++utmi_txready,
++utmi_rxvalid,
++utmi_rxactive,
++utmi_rxerror,
++utmi_linestate,
++utmi_hostdisc,
++utmi_iddig,
++utmi_vbusvalid,
++utmi_sessend,
++utmi_txvalid,
++utmi_opmode,
++utmi_xcvrsel,
++utmi_termsel,
++utmi_dppulldown,
++utmi_dmpulldown,
++utmi_idpullup,
++utmi_chrgvbus,
++utmi_dischrgvbus,
++utmi_suspend_n,
++
+ lcd_nrst,
+ lcd_csel,
+ lcd_rd,
+@@ -219,6 +246,7 @@ output  [7:0]nand_dat_o ;
+ output uart0_int;
+ output nand_int;
+ output ps2_int;
++output usb_int;
+ 
+ input  ps2_clk_i;
+ output ps2_clk_o;
+@@ -227,6 +255,32 @@ input  ps2_dat_i;
+ output ps2_dat_o;
+ output ps2_dat_t;
+ 
++input         usb_clk;
++input         usb_resetn;
++input  [7:0]  utmi_data_in;
++output [7:0]  utmi_data_out;
++output        utmi_data_t;
++output        utmi_reset;
++input         utmi_txready;
++input         utmi_rxvalid;
++input         utmi_rxactive;
++input         utmi_rxerror;
++input  [1:0]  utmi_linestate;
++input         utmi_hostdisc;
++input         utmi_iddig;
++input         utmi_vbusvalid;
++input         utmi_sessend;
++output        utmi_txvalid;
++output [1:0]  utmi_opmode;
++output [1:0]  utmi_xcvrsel;
++output        utmi_termsel;
++output        utmi_dppulldown;
++output        utmi_dmpulldown;
++output        utmi_idpullup;
++output        utmi_chrgvbus;
++output        utmi_dischrgvbus;
++output        utmi_suspend_n;
++
+ output        lcd_nrst;
+ output        lcd_csel;
+ output        lcd_rd;
+@@ -300,6 +354,33 @@ wire  [ADDR_APB-1:0] apb_lcd_addr;
+ wire  [31:0]        apb_lcd_datai;
+ wire  [31:0]        apb_lcd_datao;
+ 
++wire                apb_usb_req;
++wire                apb_usb_ack;
++wire                apb_usb_rw;
++wire                apb_usb_enab;
++wire                apb_usb_psel;
++wire  [ADDR_APB-1:0] apb_usb_addr;
++wire  [31:0]         apb_usb_datai;
++wire  [31:0]         apb_usb_datao;
++
++wire [31:0] usb_cfg_awaddr;
++wire        usb_cfg_awvalid;
++wire        usb_cfg_awready;
++wire [31:0] usb_cfg_wdata;
++wire [3:0]  usb_cfg_wstrb;
++wire        usb_cfg_wvalid;
++wire        usb_cfg_wready;
++wire [1:0]  usb_cfg_bresp;
++wire        usb_cfg_bvalid;
++wire        usb_cfg_bready;
++wire [31:0] usb_cfg_araddr;
++wire        usb_cfg_arvalid;
++wire        usb_cfg_arready;
++wire [31:0] usb_cfg_rdata;
++wire [1:0]  usb_cfg_rresp;
++wire        usb_cfg_rvalid;
++wire        usb_cfg_rready;
++
+ axi2apb_bridge AA_axi2apb_bridge_cpu 
+ (
+ .clk                (clk                ),
+@@ -418,7 +499,16 @@ apb_mux2 AA_apb_mux16
+ .apb3_psel          (apb_lcd_psel       ),
+ .apb3_addr          (apb_lcd_addr       ),
+ .apb3_datai         (apb_lcd_datai      ),
+-.apb3_datao         (apb_lcd_datao      )
++.apb3_datao         (apb_lcd_datao      ),
++
++.apb4_req           (apb_usb_req        ),
++.apb4_ack           (apb_usb_ack        ),
++.apb4_rw            (apb_usb_rw         ),
++.apb4_enab          (apb_usb_enab       ),
++.apb4_psel          (apb_usb_psel       ),
++.apb4_addr          (apb_usb_addr       ),
++.apb4_datai         (apb_usb_datai      ),
++.apb4_datao         (apb_usb_datao      )
+                                         
+ );
+ 
+@@ -491,6 +581,85 @@ nt35510_apb_adapter lcd_controller
+ .lcd_data_t        (lcd_data_t          )
+ );
+ 
++apb_usbh_bridge usb_apb_bridge
++(
++.apb_clk           (clk                 ),
++.apb_resetn        (rst_n               ),
++.apb_psel          (apb_usb_psel        ),
++.apb_penable       (apb_usb_enab        ),
++.apb_pwrite        (apb_usb_rw          ),
++.apb_paddr         (apb_usb_addr        ),
++.apb_pwdata        (apb_usb_datai       ),
++.apb_prdata        (apb_usb_datao       ),
++.apb_pready        (apb_usb_ack         ),
++.usb_clk           (usb_clk             ),
++.usb_resetn        (usb_resetn          ),
++.cfg_awaddr        (usb_cfg_awaddr      ),
++.cfg_awvalid       (usb_cfg_awvalid     ),
++.cfg_awready       (usb_cfg_awready     ),
++.cfg_wdata         (usb_cfg_wdata       ),
++.cfg_wstrb         (usb_cfg_wstrb       ),
++.cfg_wvalid        (usb_cfg_wvalid      ),
++.cfg_wready        (usb_cfg_wready      ),
++.cfg_bresp         (usb_cfg_bresp       ),
++.cfg_bvalid        (usb_cfg_bvalid      ),
++.cfg_bready        (usb_cfg_bready      ),
++.cfg_araddr        (usb_cfg_araddr      ),
++.cfg_arvalid       (usb_cfg_arvalid     ),
++.cfg_arready       (usb_cfg_arready     ),
++.cfg_rdata         (usb_cfg_rdata       ),
++.cfg_rresp         (usb_cfg_rresp       ),
++.cfg_rvalid        (usb_cfg_rvalid      ),
++.cfg_rready        (usb_cfg_rready      )
++);
++
++usbh_top usb_host_controller
++(
++.aclk              (usb_clk             ),
++.aresetn           (usb_resetn          ),
++.intr              (usb_int             ),
++.cfg_awvalid       (usb_cfg_awvalid     ),
++.cfg_awaddr        (usb_cfg_awaddr      ),
++.cfg_wvalid        (usb_cfg_wvalid      ),
++.cfg_wdata         (usb_cfg_wdata       ),
++.cfg_wstrb         (usb_cfg_wstrb       ),
++.cfg_bready        (usb_cfg_bready      ),
++.cfg_arvalid       (usb_cfg_arvalid     ),
++.cfg_araddr        (usb_cfg_araddr      ),
++.cfg_rready        (usb_cfg_rready      ),
++.cfg_awready       (usb_cfg_awready     ),
++.cfg_wready        (usb_cfg_wready      ),
++.cfg_bvalid        (usb_cfg_bvalid      ),
++.cfg_bresp         (usb_cfg_bresp       ),
++.cfg_arready       (usb_cfg_arready     ),
++.cfg_rvalid        (usb_cfg_rvalid      ),
++.cfg_rdata         (usb_cfg_rdata       ),
++.cfg_rresp         (usb_cfg_rresp       ),
++.utmi_data_in      (utmi_data_in        ),
++.utmi_data_out     (utmi_data_out       ),
++.utmi_data_t       (utmi_data_t         ),
++.utmi_reset        (utmi_reset          ),
++.utmi_txready      (utmi_txready        ),
++.utmi_rxvalid      (utmi_rxvalid        ),
++.utmi_rxactive     (utmi_rxactive       ),
++.utmi_rxerror      (utmi_rxerror        ),
++.utmi_linestate    (utmi_linestate      ),
++.utmi_txvalid      (utmi_txvalid        ),
++.utmi_opmode       (utmi_opmode         ),
++.utmi_xcvrsel      (utmi_xcvrsel        ),
++.utmi_termsel      (utmi_termsel        ),
++.utmi_dppulldown   (utmi_dppulldown     ),
++.utmi_dmpulldown   (utmi_dmpulldown     ),
++.utmi_idpullup     (utmi_idpullup       ),
++.utmi_chrgvbus     (utmi_chrgvbus       ),
++.utmi_dischrgvbus  (utmi_dischrgvbus    ),
++.utmi_suspend_n    (utmi_suspend_n      ),
++.utmi_hostdisc     (utmi_hostdisc       ),
++.utmi_iddig        (utmi_iddig          ),
++.utmi_vbusvalid    (utmi_vbusvalid      ),
++.utmi_sessend      (utmi_sessend        )
++);
++
+ //NAND
+ nand_module nand_module 
+ (
+@@ -523,4 +692,3 @@ nand_module nand_module
+ );
+ 
+ endmodule
+-
+diff --git a/IP/APB_DEV/apb_mux2.v b/IP/APB_DEV/apb_mux2.v
+index e10d0fc..4a1d210 100644
+--- a/IP/APB_DEV/apb_mux2.v
++++ b/IP/APB_DEV/apb_mux2.v
+@@ -36,6 +36,7 @@ THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ `define APB_DEV1  6'h1e
+ `define APB_DEV2  6'h01
+ `define APB_DEV3  6'h02
++`define APB_DEV4  6'h03
+ 
+ module apb_mux2 (
+ clk,
+@@ -96,7 +97,16 @@ apb3_psel,
+ apb3_enab,
+ apb3_addr,
+ apb3_datai,
+-apb3_datao
++apb3_datao,
++
++apb4_req,
++apb4_ack,
++apb4_rw,
++apb4_psel,
++apb4_enab,
++apb4_addr,
++apb4_datai,
++apb4_datao
+ );
+ 
+ parameter ADDR_APB = 20,
+@@ -161,6 +171,15 @@ output[ADDR_APB-1:0]    apb3_addr;
+ output[31:0]            apb3_datai;
+ input [31:0]            apb3_datao;
+ 
++output                  apb4_req;
++input                   apb4_ack;
++output                  apb4_rw;
++output                  apb4_psel;
++output                  apb4_enab;
++output[ADDR_APB-1:0]    apb4_addr;
++output[31:0]            apb4_datai;
++input [31:0]            apb4_datao;
++
+ wire                    apb_ack; 
+ wire                    apb_rw;
+ wire                    apb_psel;
+@@ -182,10 +201,11 @@ assign apb_datai        = dma_grant ? apb_wdata_dma[7:0]:apb_datai_cpu;
+ assign high_24b_wr      = dma_grant ? apb_wdata_dma[31:8]:apb_high_24b_wr;  
+ assign high_24b_rd      = apb1_req ? apb1_datao[31:8] :
+                           apb2_req ? apb2_datao[31:8] :
+-                          apb3_req ? apb3_datao[31:8] : 24'h0;
++                          apb3_req ? apb3_datao[31:8] :
++                          apb4_req ? apb4_datao[31:8] : 24'h0;
+ 
+ assign apb_word_trans_cpu = dma_grant ? 1'h0 :
+-                            (apb1_req | apb2_req | apb3_req);
++                            (apb1_req | apb2_req | apb3_req | apb4_req);
+ 
+ assign apb_high_24b_rd    = dma_grant  ? 24'h0: high_24b_rd;
+ assign apb_datao_cpu      = dma_grant  ? 8'h0:  apb_datao;
+@@ -197,27 +217,32 @@ assign apb0_req = (apb_addr[ADDR_APB-1:14] ==`APB_DEV0);
+ assign apb1_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV1);
+ assign apb2_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV2);
+ assign apb3_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV3);
++assign apb4_req = (apb_addr[ADDR_APB-1:14] == `APB_DEV4);
+ 
+ assign apb0_psel = apb_psel && apb0_req ;
+ assign apb1_psel = apb_psel && apb1_req;
+ assign apb2_psel = apb_psel && apb2_req;
+ assign apb3_psel = apb_psel && apb3_req;
++assign apb4_psel = apb_psel && apb4_req;
+ 
+ assign apb0_enab = apb_enab && apb0_req ;
+ assign apb1_enab = apb_enab && apb1_req;
+ assign apb2_enab = apb_enab && apb2_req;
+ assign apb3_enab = apb_enab && apb3_req;
++assign apb4_enab = apb_enab && apb4_req;
+ 
+ assign apb_ack = apb0_req ? apb0_ack : 
+                  apb1_req ? apb1_ack : 
+                  apb2_req ? apb2_ack :
+                  apb3_req ? apb3_ack :
++                 apb4_req ? apb4_ack :
+                  1'b0;
+ 
+ assign apb_datao = apb0_req ? apb0_datao : 
+                    apb1_req ? apb1_datao[7:0] : 
+                    apb2_req ? apb2_datao[7:0] :
+                    apb3_req ? apb3_datao[7:0] :
++                   apb4_req ? apb4_datao[7:0] :
+                    8'b0;
+ 
+ 
+@@ -238,6 +263,10 @@ assign apb3_addr  = apb_addr;
+ assign apb3_datai = {high_24b_wr,apb_datai};
+ assign apb3_rw    = apb_rw;
+ 
++assign apb4_addr  = apb_addr;
++assign apb4_datai = {high_24b_wr,apb_datai};
++assign apb4_rw    = apb_rw;
++
+ endmodule
+ 
+ module arb_2_1( clk, rst_n,  valid0, valid1, dma_grant);
+diff --git a/chip/soc_demo/loongson/soc_top.v b/chip/soc_demo/loongson/soc_top.v
+index 220d4ef..398f63c 100644
+--- a/chip/soc_demo/loongson/soc_top.v
++++ b/chip/soc_demo/loongson/soc_top.v
+@@ -117,6 +117,30 @@ module soc_top(
+     inout         PS2_clk,
+     inout         PS2_dat,
+ 
++    //------USB UTMI-------
++    input         UTMI_clk,
++    inout  [7:0]  UTMI_data,
++    output        UTMI_reset,
++    input         UTMI_txready,
++    input         UTMI_rxvalid,
++    input         UTMI_rxactive,
++    input         UTMI_rxerror,
++    input  [1:0]  UTMI_linestate,
++    input         UTMI_hostdisc,
++    input         UTMI_iddig,
++    input         UTMI_vbusvalid,
++    input         UTMI_sessend,
++    output        UTMI_txvalid,
++    output [1:0]  UTMI_opmode,
++    output [1:0]  UTMI_xcvrsel,
++    output        UTMI_termsel,
++    output        UTMI_dppulldown,
++    output        UTMI_dmpulldown,
++    output        UTMI_idpullup,
++    output        UTMI_chrgvbus,
++    output        UTMI_dischrgvbus,
++    output        UTMI_suspend_n,
++
+     //------NT35510 LCD-------
+     inout  [15:0] LCD_data,
+     output        LCD_nrst,
+@@ -550,6 +574,31 @@ IOBUF ps2_clk_iobuf(
+ IOBUF ps2_dat_iobuf(
+     .IO(PS2_dat), .I(ps2_dat_o), .T(ps2_dat_t), .O(ps2_dat_i));
+ 
++//usb utmi
++wire [7:0] utmi_data_i;
++wire [7:0] utmi_data_o;
++wire       utmi_data_t;
++wire       usb_int;
++reg  [1:0] usb_reset_sync;
++generate
++    genvar usb_i;
++    for (usb_i = 0; usb_i < 8; usb_i = usb_i + 1) begin: utmi_data_loop
++        IOBUF utmi_data_iobuf(
++            .IO(UTMI_data[usb_i]),
++            .I(utmi_data_o[usb_i]),
++            .T(utmi_data_t),
++            .O(utmi_data_i[usb_i]));
++    end
++endgenerate
++
++always @(posedge UTMI_clk or negedge aresetn) begin
++    if (!aresetn)
++        usb_reset_sync <= 2'b00;
++    else
++        usb_reset_sync <= {usb_reset_sync[0], 1'b1};
++end
++wire usb_resetn = usb_reset_sync[1];
++
+ //nt35510 lcd
+ wire [15:0] lcd_data_i;
+ wire [15:0] lcd_data_o;
+@@ -634,9 +683,10 @@ assign     uart0_ri_i  = UART_RI ;
+ 
+ //interrupt
+ wire mac_int;
+-wire [5:0] int_out;
+-wire [5:0] int_n_i;
+-assign int_out = {ps2_int,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
++wire [6:0] int_out;
++wire [6:0] int_n_i;
++reg  [1:0] usb_int_sync;
++assign int_out = {usb_int_sync[1],ps2_int,dma_int,nand_int,spi_inta_o,uart0_int,mac_int};
+ assign int_n_i = ~int_out;
+ 
+ reg cpu_aresetn_1;
+@@ -651,6 +701,13 @@ end
+ 
+ assign cpu_aresetn = cpu_aresetn_2;
+ 
++always @(posedge cpu_clk or negedge cpu_aresetn) begin
++    if (!cpu_aresetn)
++        usb_int_sync <= 2'b00;
++    else
++        usb_int_sync <= {usb_int_sync[0], usb_int};
++end
++
+ //debug signals
+ wire [31:0] debug_wb_pc;
+ wire [3 :0] debug_wb_rf_wen;
+@@ -764,7 +821,7 @@ debug_sram u_debug_sram(
+ // cpu
+ core_top cpu_mid(
+   .aclk             (cpu_clk),
+-  .intrpt           ({2'b0, int_out[5:0]}),
++  .intrpt           ({1'b0, int_out[6:0]}),
+   //.nmi              (1'b1),
+ 
+   .aresetn          (cpu_aresetn  ),
+@@ -1918,6 +1975,34 @@ axi2apb_misc APB_DEV
+ .ps2_dat_o          (ps2_dat_o        ),
+ .ps2_dat_t          (ps2_dat_t        ),
+ 
++//USB UTMI
++.usb_int            (usb_int          ),
++.usb_clk            (UTMI_clk         ),
++.usb_resetn         (usb_resetn       ),
++.utmi_data_in       (utmi_data_i      ),
++.utmi_data_out      (utmi_data_o      ),
++.utmi_data_t        (utmi_data_t      ),
++.utmi_reset         (UTMI_reset       ),
++.utmi_txready       (UTMI_txready     ),
++.utmi_rxvalid       (UTMI_rxvalid     ),
++.utmi_rxactive      (UTMI_rxactive    ),
++.utmi_rxerror       (UTMI_rxerror     ),
++.utmi_linestate     (UTMI_linestate   ),
++.utmi_hostdisc      (UTMI_hostdisc    ),
++.utmi_iddig         (UTMI_iddig       ),
++.utmi_vbusvalid     (UTMI_vbusvalid   ),
++.utmi_sessend       (UTMI_sessend     ),
++.utmi_txvalid       (UTMI_txvalid     ),
++.utmi_opmode        (UTMI_opmode      ),
++.utmi_xcvrsel       (UTMI_xcvrsel     ),
++.utmi_termsel       (UTMI_termsel     ),
++.utmi_dppulldown    (UTMI_dppulldown  ),
++.utmi_dmpulldown    (UTMI_dmpulldown  ),
++.utmi_idpullup      (UTMI_idpullup    ),
++.utmi_chrgvbus      (UTMI_chrgvbus    ),
++.utmi_dischrgvbus   (UTMI_dischrgvbus ),
++.utmi_suspend_n     (UTMI_suspend_n   ),
++
+ //NT35510 LCD
+ .lcd_nrst           (LCD_nrst         ),
+ .lcd_csel           (LCD_csel         ),
+diff --git a/fpga/loongson/2023.2/system_run.xpr b/fpga/loongson/2023.2/system_run.xpr
+index 40d267b..8cc7d6c 100644
+--- a/fpga/loongson/2023.2/system_run.xpr
++++ b/fpga/loongson/2023.2/system_run.xpr
+@@ -170,6 +170,61 @@
+           <Attr Name="UsedIn" Val="simulation"/>
+         </FileInfo>
+       </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/apb_usbh_bridge.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_top.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_host.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_host_defs.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_sie.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_fifo.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_crc16.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/USB/usbh_crc5.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
+       <File Path="$PPRDIR/../../../IP/AMBA/axi2apb.v">
+         <FileInfo>
+           <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/AMBA/axi2apb.v"/>
+diff --git a/fpga/loongson/soc_up.xdc b/fpga/loongson/soc_up.xdc
+index 68387dc..f795c40 100644
+--- a/fpga/loongson/soc_up.xdc
++++ b/fpga/loongson/soc_up.xdc
+@@ -116,6 +116,41 @@ set_property IOSTANDARD LVCMOS33 [get_ports PS2_dat]
+ set_property PULLUP true [get_ports PS2_clk]
+ set_property PULLUP true [get_ports PS2_dat]
+ 
++# USB UTMI, 60 MHz PHY clock
++set_property IOSTANDARD LVCMOS33 [get_ports UTMI_*]
++set_property PACKAGE_PIN AF3 [get_ports UTMI_chrgvbus]
++set_property PACKAGE_PIN AA20 [get_ports UTMI_clk]
++set_property PACKAGE_PIN AA3 [get_ports {UTMI_data[0]}]
++set_property PACKAGE_PIN AC3 [get_ports {UTMI_data[1]}]
++set_property PACKAGE_PIN AE1 [get_ports {UTMI_data[2]}]
++set_property PACKAGE_PIN AB4 [get_ports {UTMI_data[3]}]
++set_property PACKAGE_PIN AD3 [get_ports {UTMI_data[4]}]
++set_property PACKAGE_PIN AA4 [get_ports {UTMI_data[5]}]
++set_property PACKAGE_PIN AC4 [get_ports {UTMI_data[6]}]
++set_property PACKAGE_PIN AE2 [get_ports {UTMI_data[7]}]
++set_property PACKAGE_PIN AE3 [get_ports UTMI_dischrgvbus]
++set_property PACKAGE_PIN AC1 [get_ports UTMI_dmpulldown]
++set_property PACKAGE_PIN AC2 [get_ports UTMI_dppulldown]
++set_property PACKAGE_PIN AD4 [get_ports UTMI_hostdisc]
++set_property PACKAGE_PIN W4 [get_ports UTMI_iddig]
++set_property PACKAGE_PIN AD5 [get_ports UTMI_idpullup]
++set_property PACKAGE_PIN AA5 [get_ports {UTMI_linestate[0]}]
++set_property PACKAGE_PIN AE5 [get_ports {UTMI_linestate[1]}]
++set_property PACKAGE_PIN AC6 [get_ports {UTMI_opmode[0]}]
++set_property PACKAGE_PIN AF5 [get_ports {UTMI_opmode[1]}]
++set_property PACKAGE_PIN AD23 [get_ports UTMI_reset]
++set_property PACKAGE_PIN AB5 [get_ports UTMI_rxactive]
++set_property PACKAGE_PIN AB2 [get_ports UTMI_rxerror]
++set_property PACKAGE_PIN AF22 [get_ports UTMI_rxvalid]
++set_property PACKAGE_PIN AF2 [get_ports UTMI_sessend]
++set_property PACKAGE_PIN AE20 [get_ports UTMI_suspend_n]
++set_property PACKAGE_PIN AE21 [get_ports UTMI_termsel]
++set_property PACKAGE_PIN AD21 [get_ports UTMI_txready]
++set_property PACKAGE_PIN AF23 [get_ports UTMI_txvalid]
++set_property PACKAGE_PIN AB1 [get_ports UTMI_vbusvalid]
++set_property PACKAGE_PIN AD20 [get_ports {UTMI_xcvrsel[0]}]
++set_property PACKAGE_PIN AF4 [get_ports {UTMI_xcvrsel[1]}]
++
+ # NT35510 LCD
+ set_property PACKAGE_PIN H9  [get_ports {LCD_data[0]}]
+ set_property PACKAGE_PIN K17 [get_ports {LCD_data[1]}]
+@@ -134,7 +169,7 @@ set_property PACKAGE_PIN G21 [get_ports {LCD_data[13]}]
+ set_property PACKAGE_PIN H24 [get_ports {LCD_data[14]}]
+ set_property PACKAGE_PIN J16 [get_ports {LCD_data[15]}]
+ set_property PACKAGE_PIN J25 [get_ports LCD_nrst]
+-set_property PACKAGE_PIN G24 [get_ports LCD_csel]
++set_property PACKAGE_PIN H18 [get_ports LCD_csel]
+ set_property PACKAGE_PIN K8  [get_ports LCD_rd]
+ set_property PACKAGE_PIN K16 [get_ports LCD_rs]
+ set_property PACKAGE_PIN L8  [get_ports LCD_wr]
+@@ -230,14 +265,21 @@ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TMS]
+ set_property IOSTANDARD LVCMOS33 [get_ports EJTAG_TDO]
+ 
+ create_clock -period 40.000 -name mrxclk_0 -waveform {0.000 20.000} [get_ports mrxclk_0]
+-create_clock -period 40.000 -name mtxclk_0 -waveform {0.000 20.000} [get_ports mtxclk_0]
+-
+-set_false_path -from [get_clocks clk_pll_i] -to [get_clocks clk_out2_clk_pll_33]
++create_clock -period 40.000 -name mtxclk_0 -waveform {0.000 20.000} [get_ports mtxclk_0]
++create_clock -period 16.667 -name UTMI_clk -waveform {0.000 8.333} [get_ports UTMI_clk]
++set_output_delay -clock [get_clocks UTMI_clk] -min -add_delay 0.000 [get_ports {UTMI_data[*]}]
++set_output_delay -clock [get_clocks UTMI_clk] -max -add_delay 2.000 [get_ports {UTMI_data[*]}]
++set_output_delay -clock [get_clocks UTMI_clk] -min -add_delay 0.000 [get_ports UTMI_txvalid]
++set_output_delay -clock [get_clocks UTMI_clk] -max -add_delay 2.000 [get_ports UTMI_txvalid]
++
++set_false_path -from [get_clocks clk_pll_i] -to [get_clocks clk_out2_clk_pll_33]
+ set_false_path -from [get_clocks mrxclk_0] -to [get_clocks clk_out2_clk_pll_33]
+ set_false_path -from [get_clocks mtxclk_0] -to [get_clocks clk_out2_clk_pll_33]
+ set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks clk_out1_clk_pll_33]
+ set_false_path -from [get_clocks clk_out1_clk_pll_33] -to [get_clocks clk_out2_clk_pll_33]
+ set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mrxclk_0]
+ set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mrxclk_0]
+-set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
+-set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
++set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
++set_false_path -from [get_clocks clk_out2_clk_pll_33] -to [get_clocks mtxclk_0]
++set_clock_groups -asynchronous -group [get_clocks UTMI_clk] -group [get_clocks clk_out1_clk_pll_33]
++set_clock_groups -asynchronous -group [get_clocks UTMI_clk] -group [get_clocks clk_out2_clk_pll_33]

@@ -210,6 +210,7 @@ fi
 
 runtime_paths=(
 	"${target_dir}/usr/bin/Xorg"
+	"${target_dir}/usr/bin/evtest"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
@@ -277,10 +278,11 @@ overlay_sha256=$(tar --sort=name --mtime=@0 --owner=0 --group=0 \
 busybox_source_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
 busybox_config_sha256=$(sha256sum "${busybox_build_dir}/.config" | awk '{print $1}')
 busybox_size=$(stat -c '%s' "${target_dir}/bin/busybox")
-component_names=(busybox xorg fluxbox xterm fbdev evdev fbdevhw shadow)
+component_names=(busybox xorg evtest fluxbox xterm fbdev evdev fbdevhw shadow)
 component_paths=(
 	"${target_dir}/bin/busybox"
 	"${target_dir}/usr/bin/Xorg"
+	"${target_dir}/usr/bin/evtest"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
@@ -348,6 +350,9 @@ tar_crc32=${tar_crc32}
 xorg_elf_class=${xorg_class}
 xorg_elf_machine=${xorg_machine}
 xorg_sha256=${xorg_sha256}
+evtest_elf_class=${evtest_class}
+evtest_elf_machine=${evtest_machine}
+evtest_sha256=${evtest_sha256}
 fluxbox_elf_class=${fluxbox_class}
 fluxbox_elf_machine=${fluxbox_machine}
 fluxbox_sha256=${fluxbox_sha256}

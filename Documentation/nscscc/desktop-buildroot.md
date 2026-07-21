@@ -9,6 +9,7 @@ constraints.  The desktop image therefore uses the following software:
 - modular Xorg server;
 - the `fbdev` video driver and the standard `/dev/fb0` ABI;
 - the `evdev` input driver;
+- `evtest` for decoded keyboard and pointer event capture;
 - Fluxbox as the window manager, toolbar, workspace manager, and application
   menu;
 - XTerm with Xft, Fontconfig, and DejaVu Sans Mono;
@@ -31,9 +32,10 @@ The existing character-device interface remains available for full-frame
 hardware tests.  Both interfaces share the same shadow buffer and LCD
 controller lock.
 
-The kernel configuration already enables `CONFIG_INPUT_EVDEV`, PS/2 keyboard
-and mouse protocol handlers, and `CONFIG_SERIO_ALTERA_PS2`.  Xorg discovers
-every `/dev/input/event*` keyboard and pointer through eudev.
+The kernel configuration enables `CONFIG_INPUT_EVDEV`, PS/2 keyboard and
+mouse protocol handlers, `CONFIG_SERIO_ALTERA_PS2`, the UE11 USB host,
+generic USB HID, and `hidraw`. Xorg discovers every `/dev/input/event*`
+keyboard and pointer through eudev.
 
 ## Reproducible root filesystem build
 
@@ -103,6 +105,9 @@ Runtime state is available through:
 cat /var/log/nscscc-desktop.log
 cat /run/nscscc-desktop.pid
 ls -l /dev/fb0 /dev/input/event*
+lsusb
+cat /proc/bus/input/devices
+evtest /dev/input/eventX
 cat /proc/fb
 cat /sys/class/graphics/fb0/{name,virtual_size,bits_per_pixel}
 ps | grep -E 'Xorg|fluxbox|xterm|udevd'
@@ -110,13 +115,15 @@ ps | grep -E 'Xorg|fluxbox|xterm|udevd'
 
 ## Hardware limits
 
-The current SoC bitstream instantiates one Altera PS/2 controller at
-`0x1fe04000`.  It can operate a PS/2 keyboard or a PS/2 mouse, but one
-controller cannot operate two independent PS/2 devices simultaneously.  The
-userspace and Xorg configuration already accept both devices.  Simultaneous
-physical keyboard and mouse operation requires a second controller or a USB
-host controller in the Chiplab system integration; it does not require a
-desktop-image change.
+The USB system-integration bitstream instantiates one Full-Speed host at
+`0x1fe0c000`, in addition to the Altera PS/2 controller at `0x1fe04000`.
+The PS/2 controller can operate one PS/2 keyboard or mouse. A Full-Speed USB
+receiver provides the independent mouse path. The UE11 controller does not
+support Low-Speed or isochronous transfers, so device speed must be confirmed
+from the enumeration log.
+
+Detailed hardware, kernel, and event validation instructions are in
+[`usb-hid.md`](usb-hid.md).
 
 Successful creation of `/dev/fb0` and successful Xorg startup verify the
 software interface.  They do not prove that the physical LCD displays an

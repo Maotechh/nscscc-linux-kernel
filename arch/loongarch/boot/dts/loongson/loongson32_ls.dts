@@ -9,6 +9,7 @@
 
 	aliases {
 		serial0 = &cpu_uart0;
+		usb0 = &usb0;
 	};
 
 	chosen {
@@ -83,6 +84,14 @@
 			reg = <0x1fe04000 0x8>;
 			interrupt-parent = <&cpuic>;
 			interrupts = <7>;
+		};
+
+		usb0: usb@1fe0c000 {
+			compatible = "ultraembedded,usb-host-fs", "ue11-hcd";
+			reg = <0x1fe0c000 0x1000>;
+			interrupt-parent = <&cpuic>;
+			interrupts = <8>;
+			status = "okay";
 		};
 
 		lcd: lcd@1fe08000 {

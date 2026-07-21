@@ -3,7 +3,7 @@
 2026 龙芯杯团体赛 Linux 内核，fork 自
 [loongson-edu/la32r-Linux](https://gitee.com/loongson-edu/la32r-Linux) 的
 `la32r-new-world` 分支。当前 main 面向 NSCSCC 实验箱的 100 MHz UART、
-DMFE、confreg、NT35510 framebuffer 和 PS/2 控制器。
+DMFE、confreg、NT35510 framebuffer、PS/2 和 USB Full-Speed 控制器。
 
 ## 当前 main 已实现
 
@@ -16,6 +16,8 @@ DMFE、confreg、NT35510 framebuffer 和 PS/2 控制器。
 - X.Org、fbdev、evdev、eudev、Fluxbox 和 XTerm 的轻量 X11 桌面。它不是
   GNOME，也不依赖 GPU 或 OpenGL，适合实验箱的 128 MiB DDR。
 - PS/2 serio、keyboard 和 mouse protocol 支持，以及 Linux evdev 接口。
+- UE11 USB Full-Speed host、USB HID、`hid-generic`、`hidraw`、evdev 和
+  Buildroot `evtest`，用于 USB 鼠标接收器和 X.Org 输入。
 - build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
   manifest，便于校验不同主机之间的文件身份。
 
@@ -62,6 +64,11 @@ scripts/nscscc/build-kernel.sh \
 
 桌面 image 的构建细节、Buildroot patch identity、runtime loader 处理和
 initramfs 约束见 [`Documentation/nscscc/desktop-buildroot.md`](Documentation/nscscc/desktop-buildroot.md)。
+USB RTL、kernel、HID 和 input event 的映射及验证方法见
+[`Documentation/nscscc/usb-hid.md`](Documentation/nscscc/usb-hid.md)。
+当前 USB bitstream 的 Chiplab patch、RTL 与约束文件 SHA256、routed
+package pin、时序、DRC 和文件身份见
+[`Documentation/nscscc/evidence/usb-hardware-20260722.manifest`](Documentation/nscscc/evidence/usb-hardware-20260722.manifest)。
 
 ## U-Boot TFTP 启动
 
@@ -111,8 +118,10 @@ artifact contract 见
   event 或实际输入操作已经通过。新的双向 PS/2 controller 已通过 keyboard
   reset、`0xfa` ACK、`0xaa` BAT、FIFO 和 interrupt 仿真，但尚未在实物键盘上
   验证。
-- 单个 PS/2 controller 不能同时连接两个独立 PS/2 设备；同时使用 keyboard
-  和 mouse 需要 Chiplab 增加第二个 controller 或 USB host controller。
+- 单个 PS/2 controller 不能同时连接两个独立 PS/2 设备。USB
+  Full-Speed host 为鼠标接收器提供独立输入。
+- UE11 controller 不支持 Low-Speed 和 isochronous transfer。接收器必须
+  以 Full-Speed 枚举。
 
 ## 依赖
 
