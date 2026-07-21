@@ -172,6 +172,8 @@ for path in "${rootfs_cpio}" "${rootfs_tar}" \
 	"${target_dir}/usr/bin/fluxbox" "${target_dir}/usr/bin/xterm" \
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so" \
 	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so" \
+	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so" \
+	"${target_dir}/usr/lib/xorg/modules/libshadow.so" \
 	"${target_dir}/etc/nscscc/desktop-build-info"; do
 	if [[ ! -e ${path} ]]; then
 		echo "Desktop build output is missing: ${path}" >&2
@@ -203,6 +205,30 @@ shopt -u nullglob
 if (( ${#unwanted_runtime[@]} != 0 )); then
 	echo "Unexpected unused desktop runtime files:" >&2
 	printf '  %s\n' "${unwanted_runtime[@]}" >&2
+	exit 1
+fi
+
+runtime_paths=(
+	"${target_dir}/usr/bin/Xorg"
+	"${target_dir}/usr/bin/fluxbox"
+	"${target_dir}/usr/bin/xterm"
+	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
+	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so"
+	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so"
+	"${target_dir}/usr/lib/xorg/modules/libshadow.so"
+)
+for path in "${runtime_paths[@]}"; do
+	while read -r needed; do
+		if [[ ! -e ${target_dir}/usr/lib/${needed} ]]; then
+			echo "Runtime dependency is outside the loader search path: ${path}: ${needed}" >&2
+			exit 1
+		fi
+	done < <("${cross_compile}readelf" -d "${path}" |
+		awk -F'[][]' '/NEEDED/{print $2}')
+done
+if ! grep -Fq 'Load "fbdevhw"' "${target_dir}/etc/X11/xorg.conf" ||
+	! grep -Fq 'Load "shadow"' "${target_dir}/etc/X11/xorg.conf"; then
+	echo "Xorg config must preload fbdevhw and shadow before fbdev_drv.so" >&2
 	exit 1
 fi
 
@@ -251,7 +277,7 @@ overlay_sha256=$(tar --sort=name --mtime=@0 --owner=0 --group=0 \
 busybox_source_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
 busybox_config_sha256=$(sha256sum "${busybox_build_dir}/.config" | awk '{print $1}')
 busybox_size=$(stat -c '%s' "${target_dir}/bin/busybox")
-component_names=(busybox xorg fluxbox xterm fbdev evdev)
+component_names=(busybox xorg fluxbox xterm fbdev evdev fbdevhw shadow)
 component_paths=(
 	"${target_dir}/bin/busybox"
 	"${target_dir}/usr/bin/Xorg"
@@ -259,6 +285,8 @@ component_paths=(
 	"${target_dir}/usr/bin/xterm"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
 	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so"
+	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so"
+	"${target_dir}/usr/lib/xorg/modules/libshadow.so"
 )
 for i in "${!component_names[@]}"; do
 	component=${component_names[$i]}
@@ -332,6 +360,12 @@ fbdev_sha256=${fbdev_sha256}
 evdev_elf_class=${evdev_class}
 evdev_elf_machine=${evdev_machine}
 evdev_sha256=${evdev_sha256}
+fbdevhw_elf_class=${fbdevhw_class}
+fbdevhw_elf_machine=${fbdevhw_machine}
+fbdevhw_sha256=${fbdevhw_sha256}
+shadow_elf_class=${shadow_class}
+shadow_elf_machine=${shadow_machine}
+shadow_sha256=${shadow_sha256}
 EOF
 
 cat "${manifest}"

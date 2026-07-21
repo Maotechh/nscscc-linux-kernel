@@ -60,6 +60,14 @@ script removes the unused Fortran/OpenMP libraries and eudev hardware database
 from the target image.  Fluxbox retains C++ support, while the image keeps
 only the DejaVu Sans and Sans Mono families used by the desktop.
 
+The GCC 8.3 runtime loader searches `/usr/lib32/sf`, which resolves to
+`/usr/lib` in this image, while Buildroot installs glibc runtime libraries in
+`/lib`.  The post-build script adds relative links in `/usr/lib` for every
+runtime library in `/lib`, then verifies the `DT_NEEDED` entries for Xorg,
+Fluxbox, XTerm, fbdev, evdev, fbdevhw, and shadow.  This is required for both
+Xorg and eudev; setting a library path only in the desktop service would leave
+input-device discovery unavailable.
+
 For an embedded initramfs kernel, pass Buildroot's extracted target directory
 to the existing kernel helper:
 
@@ -85,6 +93,9 @@ starts Xorg on `/dev/fb0`.  Fluxbox and one XTerm are started by
 framebuffer does not prevent the serial shell from working.  The post-build
 step removes Buildroot's generic `S40xorg` service because
 `S99nscscc-desktop` is the sole owner of Xorg startup and logging.
+The Xorg configuration explicitly loads `fbdevhw` and `shadow` before the
+fbdev video driver.  The LA32R module loader otherwise rejects
+`fbdev_drv.so` before that driver can request its own helper modules.
 
 Runtime state is available through:
 
@@ -94,7 +105,7 @@ cat /run/nscscc-desktop.pid
 ls -l /dev/fb0 /dev/input/event*
 cat /proc/fb
 cat /sys/class/graphics/fb0/{name,virtual_size,bits_per_pixel}
-ps | grep -E 'Xorg|fluxbox|xterm'
+ps | grep -E 'Xorg|fluxbox|xterm|udevd'
 ```
 
 ## Hardware limits

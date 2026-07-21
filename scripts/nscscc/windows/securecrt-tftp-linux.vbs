@@ -247,6 +247,7 @@ Sub Main
     If ok Then ok = RunLinuxCommand(statusFile, "pidof Xorg >/dev/null && echo XORG_RUNNING", "__DONE_XORG__", 30, "XORG_RUNNING")
     If ok Then ok = RunLinuxCommand(statusFile, "pidof fluxbox >/dev/null && echo FLUXBOX_RUNNING", "__DONE_FLUXBOX__", 30, "FLUXBOX_RUNNING")
     If ok Then ok = RunLinuxCommand(statusFile, "pidof xterm >/dev/null && echo XTERM_RUNNING", "__DONE_XTERM__", 30, "XTERM_RUNNING")
+    If ok Then ok = RunLinuxCommand(statusFile, "pidof udevd >/dev/null && echo UDEVD_RUNNING", "__DONE_UDEVD__", 30, "UDEVD_RUNNING")
     If ok Then ok = RunLinuxCommand(statusFile, "tail -80 /var/log/nscscc-desktop.log", "__DONE_DESKTOP_LOG__", 60, "X.Org X Server")
     If ok Then ok = RunLinuxCommand(statusFile, "test ""$(cat /sys/class/net/eth0/statistics/rx_errors)"" = 0 && test ""$(cat /sys/class/net/eth0/statistics/tx_errors)"" = 0 && echo NETWORK_ERRORS_ZERO", "__DONE_NET_ERRORS_AFTER__", 30, "NETWORK_ERRORS_ZERO")
     If ok Then ok = RunLinuxCommand(statusFile, "if dmesg | grep -E 'BUG:|Oops:|Kernel panic|Call Trace:'; then exit 1; else echo KERNEL_ERRORS_NONE; fi", "__DONE_KERNEL_ERRORS__", 30, "KERNEL_ERRORS_NONE")
