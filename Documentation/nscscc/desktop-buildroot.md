@@ -82,7 +82,9 @@ target.
 SysV init starts the static `10.90.50.44/24` network configuration and then
 starts Xorg on `/dev/fb0`.  Fluxbox and one XTerm are started by
 `/root/.xinitrc`.  Xorg is not started when `/dev/fb0` is absent, so a missing
-framebuffer does not prevent the serial shell from working.
+framebuffer does not prevent the serial shell from working.  The post-build
+step removes Buildroot's generic `S40xorg` service because
+`S99nscscc-desktop` is the sole owner of Xorg startup and logging.
 
 Runtime state is available through:
 

@@ -18,3 +18,8 @@ rm -f \
 # not used by this fixed board and is several megabytes when generated.
 rm -f "${target_dir}/etc/udev/hwdb.bin"
 rm -f "${target_dir}"/etc/udev/hwdb.d/*.hwdb
+
+# Xorg's package script installs a generic S40xorg service unconditionally.
+# The NSCSCC service owns Xorg, Fluxbox, XTerm, logging, and stale-socket
+# cleanup, so running both services would start two servers on display :0.
+rm -f "${target_dir}/etc/init.d/S40xorg"

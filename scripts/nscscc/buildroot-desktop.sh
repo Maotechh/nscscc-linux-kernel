@@ -188,6 +188,9 @@ unwanted_runtime=()
 if [[ -e ${target_dir}/etc/udev/hwdb.bin ]]; then
 	unwanted_runtime+=("${target_dir}/etc/udev/hwdb.bin")
 fi
+if [[ -e ${target_dir}/etc/init.d/S40xorg ]]; then
+	unwanted_runtime+=("${target_dir}/etc/init.d/S40xorg")
+fi
 shopt -s nullglob
 unwanted_runtime+=(
 	"${target_dir}"/lib/libgfortran.so*

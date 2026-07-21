@@ -4,7 +4,7 @@
 Const LogDirectory = "C:\Users\Henry\fpga-lab\diagnostic\linux\logs"
 Const ManifestPath = "C:\Users\Henry\fpga-lab\diagnostic\linux\manifests\current-linux.manifest"
 Const UbootPrompt = "u-boot@LoongsonSoC# "
-Const LinuxPrompt = "/ # "
+Const LinuxPrompt = " # "
 
 Function TwoDigits(value)
     TwoDigits = Right("0" & CStr(value), 2)
@@ -192,9 +192,9 @@ Sub Main
     WriteStatus statusFile, "bootelf_sent=true"
     gotBanner = crt.Screen.WaitForString("Linux version", 240)
     WriteStatus statusFile, "linux_banner=" & gotBanner
-    gotIssue = crt.Screen.WaitForString("NSCSCC LoongArch32 Reduced Linux", 60)
+    gotIssue = crt.Screen.WaitForString("NSCSCC LoongArch32 Reduced Linux", 300)
     WriteStatus statusFile, "linux_issue=" & gotIssue
-    gotShell = crt.Screen.WaitForString(LinuxPrompt, 30)
+    gotShell = crt.Screen.WaitForString(LinuxPrompt, 120)
     WriteStatus statusFile, "linux_shell=" & gotShell
     If Not gotBanner Or Not gotIssue Or Not gotShell Then
         WriteStatus statusFile, "result=error no_linux_shell"
