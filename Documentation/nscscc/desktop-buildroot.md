@@ -50,7 +50,9 @@ scripts/nscscc/buildroot-desktop.sh \
 The helper pins the upstream Buildroot source and the three required
 `nscscc24-jit-thu/Buildroot` patches by commit, tree, and SHA256.  It writes a
 compressed initramfs, an NFS-capable root filesystem tar archive, and a
-manifest to the artifact directory.
+manifest to the artifact directory.  The manifest also records the BusyBox
+version, source archive, configuration, binary identity, and the ELF identity
+of all desktop executables and Xorg drivers used by the image.
 
 The external toolchain must advertise C++, Fortran, and OpenMP because the
 official Buildroot patch checks all advertised capabilities.  The post-build

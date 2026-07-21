@@ -39,6 +39,7 @@ post_build_script=${config_dir}/post-build-desktop.sh
 buildroot_commit=3ebc7c69d56430c34eba4c869d1d4fe4d1e8de55
 patch_repo_commit=5b73cf2f9247502fc16835f14c6a4c3edc0e88e9
 patched_buildroot_tree=ba583e6a067a16316aaaff1d6a084a56b548d359
+busybox_version=1.36.1
 
 patch_names=(
 	0001-loongarch-add-arch-support-for-LoongArch-32bit-Reduc.patch
@@ -162,7 +163,11 @@ fi
 rootfs_cpio=${output_dir}/images/rootfs.cpio.gz
 rootfs_tar=${output_dir}/images/rootfs.tar
 target_dir=${output_dir}/target
+busybox_build_dir=${output_dir}/build/busybox-${busybox_version}
+busybox_source=${source_dir}/dl/busybox/busybox-${busybox_version}.tar.bz2
 for path in "${rootfs_cpio}" "${rootfs_tar}" \
+	"${busybox_build_dir}/.config" "${busybox_source}" \
+	"${target_dir}/bin/busybox" \
 	"${target_dir}/usr/bin/Xorg" "${target_dir}/usr/bin/xinit" \
 	"${target_dir}/usr/bin/fluxbox" "${target_dir}/usr/bin/xterm" \
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so" \
@@ -240,8 +245,12 @@ defconfig_sha256=$(sha256sum "${defconfig}" | awk '{print $1}')
 post_build_sha256=$(sha256sum "${post_build_script}" | awk '{print $1}')
 overlay_sha256=$(tar --sort=name --mtime=@0 --owner=0 --group=0 \
 	--numeric-owner -C "${overlay_dir}" -cf - . | sha256sum | awk '{print $1}')
-component_names=(xorg fluxbox xterm fbdev evdev)
+busybox_source_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
+busybox_config_sha256=$(sha256sum "${busybox_build_dir}/.config" | awk '{print $1}')
+busybox_size=$(stat -c '%s' "${target_dir}/bin/busybox")
+component_names=(busybox xorg fluxbox xterm fbdev evdev)
 component_paths=(
+	"${target_dir}/bin/busybox"
 	"${target_dir}/usr/bin/Xorg"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
@@ -280,6 +289,15 @@ post_build_script=${post_build_script}
 post_build_script_sha256=${post_build_sha256}
 overlay=${overlay_source}
 overlay_sha256=${overlay_sha256}
+busybox_version=${busybox_version}
+busybox_source=${busybox_source}
+busybox_source_sha256=${busybox_source_sha256}
+busybox_config=${busybox_build_dir}/.config
+busybox_config_sha256=${busybox_config_sha256}
+busybox_size=${busybox_size}
+busybox_elf_class=${busybox_class}
+busybox_elf_machine=${busybox_machine}
+busybox_sha256=${busybox_sha256}
 build_host_arch=$(uname -m)
 toolchain=${toolchain_dir}
 toolchain_version=${toolchain_version}

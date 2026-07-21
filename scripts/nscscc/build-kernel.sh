@@ -160,9 +160,12 @@ fi
 sha256=$(sha256sum "${tftp_artifact}" | awk '{print $1}')
 debug_size=$(stat -c '%s' "${debug_artifact}")
 debug_sha256=$(sha256sum "${debug_artifact}" | awk '{print $1}')
+kernel_config_sha256=$(sha256sum "${build_dir}/.config" | awk '{print $1}')
 initramfs_size=$(stat -c '%s' "${initramfs}")
 initramfs_sha256=$(sha256sum "${initramfs}" | awk '{print $1}')
 base_rootfs_bytes=$(du -sb "${base_rootfs}" | awk '{print $1}')
+busybox_size=$(stat -c '%s' "${base_rootfs}/bin/busybox")
+busybox_sha256=$(sha256sum "${base_rootfs}/bin/busybox" | awk '{print $1}')
 desktop_build_info=${base_rootfs}/etc/nscscc/desktop-build-info
 desktop_build_info_sha256=unavailable
 if [[ -f ${desktop_build_info} ]]; then
@@ -195,8 +198,11 @@ artifact=${tftp_artifact}
 debug_artifact=${debug_artifact}
 debug_size=${debug_size}
 debug_sha256=${debug_sha256}
+kernel_config_sha256=${kernel_config_sha256}
 base_rootfs=${base_rootfs}
 base_rootfs_bytes=${base_rootfs_bytes}
+busybox_size=${busybox_size}
+busybox_sha256=${busybox_sha256}
 desktop_build_info_sha256=${desktop_build_info_sha256}
 initramfs=${initramfs}
 initramfs_repeat=${initramfs_repeat}
