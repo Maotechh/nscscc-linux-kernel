@@ -12,6 +12,7 @@ obj-vdso-y := elf.o vgettimeofday.o sigreturn.o
 ccflags-vdso := \
 	$(filter -I%,$(KBUILD_CFLAGS)) \
 	$(filter -E%,$(KBUILD_CFLAGS)) \
+	$(filter -fdebug-prefix-map=%,$(KBUILD_CFLAGS)) \
 	$(filter -march=%,$(KBUILD_CFLAGS)) \
 	$(filter -m%-float,$(KBUILD_CFLAGS)) \
 	-D__VDSO__
@@ -27,6 +28,7 @@ cflags-vdso := $(ccflags-vdso) \
 	$(call cc-option, -fno-asynchronous-unwind-tables) \
 	$(call cc-option, -fno-stack-protector)
 aflags-vdso := $(ccflags-vdso) \
+	$(filter -Wa$(comma)--debug-prefix-map=%,$(KBUILD_AFLAGS)) \
 	-D__ASSEMBLY__ -Wa,-gdwarf-2
 
 ifneq ($(c-gettimeofday-y),)

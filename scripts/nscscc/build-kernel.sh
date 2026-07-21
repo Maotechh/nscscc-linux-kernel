@@ -54,12 +54,20 @@ for tool in gcc nm readelf strip; do
 		exit 1
 	fi
 done
-for command in cmp du install python3 sha256sum stat; do
+for command in cmp date du install python3 sha256sum stat; do
 	if ! command -v "${command}" >/dev/null 2>&1; then
 		echo "Required command not found: ${command}" >&2
 		exit 1
 	fi
 done
+
+source_date_epoch=${SOURCE_DATE_EPOCH:-0}
+kbuild_timestamp=${KBUILD_BUILD_TIMESTAMP:-$(
+	LC_ALL=C date --utc --date="@${source_date_epoch}" '+%Y-%m-%d %H:%M:%S UTC'
+)}
+kbuild_user=${KBUILD_BUILD_USER:-nscscc}
+kbuild_host=${KBUILD_BUILD_HOST:-nscscc-build}
+kbuild_version=${KBUILD_BUILD_VERSION:-1}
 
 for path in Makefile scripts/config scripts/nscscc/build-initramfs.sh; do
 	if [[ ! -e ${source_dir}/${path} ]]; then
@@ -95,7 +103,14 @@ make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	CROSS_COMPILE="${cross_compile}" olddefconfig
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
-	CROSS_COMPILE="${cross_compile}" -j"${build_jobs}" vmlinux
+	CROSS_COMPILE="${cross_compile}" \
+	KBUILD_BUILD_TIMESTAMP="${kbuild_timestamp}" \
+	KBUILD_BUILD_USER="${kbuild_user}" \
+	KBUILD_BUILD_HOST="${kbuild_host}" \
+	KBUILD_BUILD_VERSION="${kbuild_version}" \
+	KCFLAGS="${KCFLAGS:+${KCFLAGS} }-fdebug-prefix-map=${build_dir}=." \
+	KAFLAGS="${KAFLAGS:+${KAFLAGS} }-Wa,--debug-prefix-map=${build_dir}=." \
+	-j"${build_jobs}" vmlinux
 
 debug_artifact=${artifact_dir}/${artifact_name}-debug
 tftp_artifact=${artifact_dir}/${artifact_name}
@@ -216,6 +231,10 @@ initramfs_crc32=${initramfs_crc32}
 initramfs_reproducible=true
 toolchain_version=${toolchain_version}
 toolchain_gcc_sha256=${toolchain_gcc_sha256}
+kbuild_build_timestamp=${kbuild_timestamp}
+kbuild_build_user=${kbuild_user}
+kbuild_build_host=${kbuild_host}
+kbuild_build_version=${kbuild_version}
 size=${artifact_size}
 sha256=${sha256}
 crc32=${crc32}
