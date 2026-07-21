@@ -1,0 +1,66 @@
+ECHO 处于关闭状态。
+ECHO 处于关闭状态。
+
+****** Vivado v2023.2 (64-bit)
+  **** SW Build 4029153 on Fri Oct 13 20:14:34 MDT 2023
+  **** IP Build 4028589 on Sat Oct 14 00:45:43 MDT 2023
+  **** SharedData Build 4025554 on Tue Oct 10 17:18:54 MDT 2023
+    ** Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
+    ** Copyright 2022-2023 Advanced Micro Devices, Inc. All Rights Reserved.
+
+source {C:\Users\Henry\fpga-lab\diagnostic\linux\program-bit-only.tcl}
+# if {$argc != 1} {
+#     puts stderr "usage: program-bit-only.tcl <bit_path>"
+#     exit 2
+# }
+# set bit_path [file normalize [lindex $argv 0]]
+# set exit_code 0
+# if {[catch {
+#     if {![file exists $bit_path]} {
+#         return -code error "bitstream does not exist: $bit_path"
+#     }
+#     open_hw_manager
+#     connect_hw_server -url localhost:3121
+#     open_hw_target
+#     set devices [get_hw_devices -quiet xc7a200t_0]
+#     if {[llength $devices] != 1} {
+#         return -code error "expected one xc7a200t_0 device, found [llength $devices]"
+#     }
+#     set device [lindex $devices 0]
+#     set_property PROGRAM.FILE $bit_path $device
+#     program_hw_devices $device
+#     refresh_hw_device $device
+#     after 3000
+#     puts "PROGRAMMED=[file tail $bit_path]"
+# } message options]} {
+#     puts stderr "ERROR=$message"
+#     if {[dict exists $options -errorinfo]} {
+#         puts stderr "DETAIL=[dict get $options -errorinfo]"
+#     }
+#     set exit_code 30
+# }
+open_hw_manager: Time (s): cpu = 00:00:10 ; elapsed = 00:00:10 . Memory (MB): peak = 488.258 ; gain = 184.012
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:localhost:3121
+INFO: [Labtools 27-3415] Connecting to cs_server url TCP:localhost:0
+INFO: [Labtools 27-3417] Launching cs_server...
+INFO: [Labtools 27-2221] Launch Output:
+ECHO 处于关闭状态。
+ECHO 处于关闭状态。
+
+
+******** Xilinx cs_server v2023.2.0
+  ****** Build date   : Oct 10 2023-13:01:56
+    **** Build number : 2023.2.1696910516
+      ** Copyright 2017-2022 Xilinx, Inc. All Rights Reserved.
+      ** Copyright 2022-2026 Advanced Micro Devices, Inc. All Rights Reserved.
+
+
+
+INFO: [Labtoolstcl 44-466] Opening hw_target localhost:3121/xilinx_tcf/Digilent/210251A08870
+INFO: [Labtools 27-3164] End of startup status: HIGH
+program_hw_devices: Time (s): cpu = 00:00:05 ; elapsed = 00:00:06 . Memory (MB): peak = 494.484 ; gain = 0.000
+INFO: [Labtools 27-1434] Device xc7a200t (JTAG device index = 0) is programmed with a design that has no supported debug core(s) in it.
+PROGRAMMED=soc_top-ad6551-cpu40-uncore100-display-ps2-final.bit
+# catch {close_hw_manager}
+# exit $exit_code
+INFO: [Common 17-206] Exiting Vivado at Tue Jul 21 08:48:50 2026...

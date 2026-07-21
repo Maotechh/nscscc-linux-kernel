@@ -1,0 +1,676 @@
+2026/7/21 8:57:30 connected=-1
+2026/7/21 8:57:30 manifest=C:\Users\Henry\fpga-lab\diagnostic\linux\manifests\current-linux.manifest
+2026/7/21 8:57:30 kernel_file=vmlinux-556d59af0-nonlcd
+2026/7/21 8:57:30 kernel_size=16286568
+2026/7/21 8:57:30 kernel_sha256=e69044c0b6ea577bc6e494a19107eafd7a83da32e16cb11ac58a52c299bf5342
+2026/7/21 8:57:30 kernel_crc32=caf16247
+2026/7/21 8:57:30 kernel_commit=556d59af05d75f05e3f4a080d61f70a19c030635
+2026/7/21 8:57:30 bitstream=soc_top-ad6551-cpu40-uncore100-display-ps2-final.bit
+2026/7/21 8:57:30 bitstream_sha256=ceef87d7003d406c0d1e894ada46262940186de20191feda23124212bae8d38d
+2026/7/21 8:57:30 uboot_prompt_attempt=1
+2026/7/21 8:57:30 uboot_prompt=True
+2026/7/21 8:57:31 command=setenv ipaddr 10.90.50.44
+2026/7/21 8:57:31 output_begin
+setenv ipaddr 10.90.50.44; echo __SET_IP__
+__SET_IP__
+
+2026/7/21 8:57:31 output_end
+2026/7/21 8:57:31 marker_seen=True
+2026/7/21 8:57:32 command=setenv serverip 10.90.50.43
+2026/7/21 8:57:32 output_begin
+setenv serverip 10.90.50.43; echo __SET_SERVER__
+__SET_SERVER__
+
+2026/7/21 8:57:32 output_end
+2026/7/21 8:57:32 marker_seen=True
+2026/7/21 8:57:33 command=setenv netmask 255.255.255.0
+2026/7/21 8:57:33 output_begin
+setenv netmask 255.255.255.0; echo __SET_MASK__
+__SET_MASK__
+
+2026/7/21 8:57:33 output_end
+2026/7/21 8:57:33 marker_seen=True
+2026/7/21 8:57:33 command=setenv ethaddr 00:98:76:64:32:19
+2026/7/21 8:57:33 output_begin
+setenv ethaddr 00:98:76:64:32:19; echo __SET_MAC__
+__SET_MAC__
+
+2026/7/21 8:57:33 output_end
+2026/7/21 8:57:33 marker_seen=True
+2026/7/21 8:57:34 command=ping 10.90.50.43
+2026/7/21 8:57:34 output_begin
+ping 10.90.50.43; echo __PING_DONE__
+Using ethernet@0x9ff00000 device
+host 10.90.50.43 is alive
+__PING_DONE__
+
+2026/7/21 8:57:34 output_end
+2026/7/21 8:57:34 marker_seen=True
+2026/7/21 8:57:34 expected_seen=True expected=is alive
+2026/7/21 8:58:34 command=tftpboot 0xa3000000 vmlinux-556d59af0-nonlcd
+2026/7/21 8:58:34 output_begin
+tftpboot 0xa3000000 vmlinux-556d59af0-nonlcd; echo __TFTP_DONE__
+Using ethernet@0x9ff00000 device
+TFTP from server 10.90.50.43; our IP address is 10.90.50.44
+Filename 'vmlinux-556d59af0-nonlcd'.
+Load address: 0xa3000000
+Loading: *#################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #################################################################
+	 #############################################################
+	 267.6 KiB/s
+done
+Bytes transferred = 16286568 (f88368 hex)
+__TFTP_DONE__
+
+2026/7/21 8:58:34 output_end
+2026/7/21 8:58:34 marker_seen=True
+2026/7/21 8:58:34 expected_seen=True expected=Bytes transferred = 16286568
+2026/7/21 8:58:39 command=crc32 0xa3000000 ${filesize}
+2026/7/21 8:58:39 output_begin
+crc32 0xa3000000 ${filesize}; echo __CRC_DONE__
+CRC32 for a3000000 ... a3f88367 ==> caf16247
+__CRC_DONE__
+
+2026/7/21 8:58:39 output_end
+2026/7/21 8:58:39 marker_seen=True
+2026/7/21 8:58:39 expected_seen=True expected=caf16247
+2026/7/21 8:58:40 bootelf_sent=true
+2026/7/21 8:58:45 linux_banner=-1
+2026/7/21 8:59:18 linux_issue=-1
+2026/7/21 8:59:18 linux_shell=-1
+2026/7/21 8:59:20 command=set +m
+2026/7/21 8:59:20 output_begin
+set +m; rc=$?; echo __DONE_SETM__ rc=$rc
+__DONE_SETM__ rc=0
+
+2026/7/21 8:59:20 output_end
+2026/7/21 8:59:20 marker_seen=True
+2026/7/21 8:59:20 command_success=True
+2026/7/21 8:59:21 command=uname -a
+2026/7/21 8:59:21 output_begin
+uname -a; rc=$?; echo __DONE_UNAME__ rc=$rc
+Linux nscscc-la32r 5.14.0-rc2-g556d59af05d7 #1 PREEMPT Tue Jul 21 07:30:57 CST 2026 loongarch32r GNU/Linux
+__DONE_UNAME__ rc=0
+
+2026/7/21 8:59:21 output_end
+2026/7/21 8:59:21 marker_seen=True
+2026/7/21 8:59:21 expected_seen=True expected=Linux
+2026/7/21 8:59:21 command_success=True
+2026/7/21 8:59:22 command=cat /proc/cpuinfo
+2026/7/21 8:59:22 output_begin
+cat /proc/cpuinfo; rc=$?; echo __DONE_CPUINFO__ rc=$rc
+system type		: generic-loongson-machine
+
+processor		: 0
+package			: 0
+core			: 0
+CPU Family		: Loongson-32bit
+Model Name		:         -        
+PRID			: 00004200
+CPU Revision		: 0x00
+FPU Revision		: 0x00
+CPU MHz			: 0.00
+BogoMIPS		: 400.00
+TLB Entries		: 2112
+Address Sizes		: 32 bits physical, 32 bits virtual
+ISA			: loongarch32r loongarch32s
+Features		: cpucfg csr tlb vint watch
+Hardware Watchpoint	: yes, iwatch count: 0, dwatch count: 0
+
+__DONE_CPUINFO__ rc=0
+
+2026/7/21 8:59:22 output_end
+2026/7/21 8:59:22 marker_seen=True
+2026/7/21 8:59:22 expected_seen=True expected=processor
+2026/7/21 8:59:22 command_success=True
+2026/7/21 8:59:24 command=grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo
+2026/7/21 8:59:24 output_begin
+grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo; rc=$?; echo __DON
+E_MEM__ rc=$rc
+MemTotal:         115596 kB
+MemFree:           94872 kB
+MemAvailable:      92972 kB
+__DONE_MEM__ rc=0
+
+2026/7/21 8:59:24 output_end
+2026/7/21 8:59:24 marker_seen=True
+2026/7/21 8:59:24 expected_seen=True expected=MemTotal
+2026/7/21 8:59:24 command_success=True
+2026/7/21 8:59:27 command=dmesg | grep -E 'Memory: .*131072K'
+2026/7/21 8:59:27 output_begin
+dmesg | grep -E 'Memory: .*131072K'; rc=$?; echo __DONE_MEMORY_PHYSICAL__ rc
+=$rc
+[    0.000000] Memory: 111244K/131072K available (8784K kernel code, 1148K rwdata, 1644K rodata, 4352K init, 496K bss, 19828K reserved, 0K cma-reserved)
+__DONE_MEMORY_PHYSICAL__ rc=0
+
+2026/7/21 8:59:27 output_end
+2026/7/21 8:59:27 marker_seen=True
+2026/7/21 8:59:27 expected_seen=True expected=131072K
+2026/7/21 8:59:27 command_success=True
+2026/7/21 8:59:29 command=dmesg | grep -E 'NR_IRQS|Constant clock event|Constant clock source'
+2026/7/21 8:59:29 output_begin
+dmesg | grep -E 'NR_IRQS|Constant clock event|Constant clock source'; rc=$?;
+ echo __DONE_EXCEPTION_TIMER__ rc=$rc
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] Constant clock source device register
+__DONE_EXCEPTION_TIMER__ rc=0
+
+2026/7/21 8:59:29 output_end
+2026/7/21 8:59:29 marker_seen=True
+2026/7/21 8:59:29 expected_seen=True expected=Constant clock event
+2026/7/21 8:59:29 command_success=True
+2026/7/21 8:59:32 command=dmesg | grep 'Run /init as init process'
+2026/7/21 8:59:32 output_begin
+dmesg | grep 'Run /init as init process'; rc=$?; echo __DONE_INITRAMFS__ rc=
+$rc
+[    5.908000] Run /init as init process
+__DONE_INITRAMFS__ rc=0
+
+2026/7/21 8:59:32 output_end
+2026/7/21 8:59:32 marker_seen=True
+2026/7/21 8:59:32 expected_seen=True expected=Run /init
+2026/7/21 8:59:32 command_success=True
+2026/7/21 8:59:33 command=mount
+2026/7/21 8:59:33 output_begin
+mount; rc=$?; echo __DONE_MOUNT__ rc=$rc
+rootfs on / type rootfs (rw,size=55620k,nr_inodes=13905)
+devtmpfs on /dev type devtmpfs (rw,relatime,size=55620k,nr_inodes=13905,mode=755)
+proc on /proc type proc (rw,relatime)
+sysfs on /sys type sysfs (rw,relatime)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+tmpfs on /run type tmpfs (rw,nosuid,nodev,relatime,mode=755)
+__DONE_MOUNT__ rc=0
+
+2026/7/21 8:59:33 output_end
+2026/7/21 8:59:33 marker_seen=True
+2026/7/21 8:59:33 expected_seen=True expected=devtmpfs
+2026/7/21 8:59:33 command_success=True
+2026/7/21 8:59:35 command=cat /etc/nscscc/build-info
+2026/7/21 8:59:35 output_begin
+[    9.440000] dev 1:Link OK 4
+[    9.440000]  dmfe: Change Speed to 100Mhz full duplex
+cat /etc/nscscc/build-info; rc=$?; echo __DONE_BUILD_INFO__ rc=$rc
+KERNEL_SOURCE_COMMIT=556d59af05d75f05e3f4a080d61f70a19c030635
+BUSYBOX_ORIGIN=override
+BUSYBOX_SHA256=72827c680b3b2afd73fd64d7ca99137e92019a6539527fa453c570ee616e1fff
+SOURCE_DATE_EPOCH=0
+__DONE_BUILD_INFO__ rc=0
+
+2026/7/21 8:59:35 output_end
+2026/7/21 8:59:35 marker_seen=True
+2026/7/21 8:59:35 expected_seen=True expected=556d59af05d75f05e3f4a080d61f70a19c030635
+2026/7/21 8:59:35 command_success=True
+2026/7/21 8:59:37 command=cat /sys/class/chiplab_confreg/chiplab_confreg/device_info
+2026/7/21 8:59:37 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/device_info; rc=$?; echo __DO
+NE_CONFREG_INFO__ rc=$rc
+Chiplab Confreg Device (Loongson)
+Physical base: 0x1fd0e000
+Character device: 249:0
+Platform device: 1fd0e000.confreg
+__DONE_CONFREG_INFO__ rc=0
+
+2026/7/21 8:59:37 output_end
+2026/7/21 8:59:37 marker_seen=True
+2026/7/21 8:59:37 expected_seen=True expected=Physical base
+2026/7/21 8:59:37 command_success=True
+2026/7/21 8:59:39 command=cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs
+2026/7/21 8:59:39 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs; rc=$?; echo __DON
+E_CONFREG_INPUTS__ rc=$rc
+switches=0xf6 buttons=0x0000 step=0x00 freq=33000000Hz
+__DONE_CONFREG_INPUTS__ rc=0
+
+2026/7/21 8:59:39 output_end
+2026/7/21 8:59:39 marker_seen=True
+2026/7/21 8:59:39 expected_seen=True expected=switches=
+2026/7/21 8:59:39 command_success=True
+2026/7/21 8:59:41 command=ip addr show
+2026/7/21 8:59:41 output_begin
+ip addr show; rc=$?; echo __DONE_IP_ADDR__ rc=$rc
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 1000
+    link/ether 00:98:76:64:32:19 brd ff:ff:ff:ff:ff:ff
+    inet 10.90.50.44/24 scope global eth0
+       valid_lft forever preferred_lft forever
+3: dummy0: <BROADCAST,NOARP> mtu 1500 qdisc noop qlen 1000
+    link/ether be:8e:31:14:bf:06 brd ff:ff:ff:ff:ff:ff
+4: sit0@NONE: <NOARP> mtu 1480 qdisc noop qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+__DONE_IP_ADDR__ rc=0
+
+2026/7/21 8:59:41 output_end
+2026/7/21 8:59:41 marker_seen=True
+2026/7/21 8:59:41 expected_seen=True expected=10.90.50.44/24
+2026/7/21 8:59:41 command_success=True
+2026/7/21 8:59:45 command=cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics/tx_packets /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statistics/tx_errors
+2026/7/21 8:59:45 output_begin
+cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics
+/tx_packets /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statist
+ics/tx_errors; rc=$?; echo __DONE_IP_LINK__ rc=$rc
+45
+8
+0
+0
+__DONE_IP_LINK__ rc=0
+
+2026/7/21 8:59:45 output_end
+2026/7/21 8:59:45 marker_seen=True
+2026/7/21 8:59:45 command_success=True
+2026/7/21 8:59:47 command=test "$(cat /sys/class/net/eth0/carrier)" = 1 && echo CARRIER_OK
+2026/7/21 8:59:47 output_begin
+test "$(cat /sys/class/net/eth0/carrier)" = 1 && echo CARRIER_OK; rc=$?; ech
+o __DONE_CARRIER__ rc=$rc
+CARRIER_OK
+__DONE_CARRIER__ rc=0
+
+2026/7/21 8:59:47 output_end
+2026/7/21 8:59:47 marker_seen=True
+2026/7/21 8:59:47 expected_seen=True expected=CARRIER_OK
+2026/7/21 8:59:47 command_success=True
+2026/7/21 8:59:51 command=test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /sys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO
+2026/7/21 8:59:51 output_begin
+test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /s
+ys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO; rc=$?;
+ echo __DONE_NET_ERRORS_BEFORE__ rc=$rc
+NETWORK_ERRORS_ZERO
+__DONE_NET_ERRORS_BEFORE__ rc=0
+
+2026/7/21 8:59:51 output_end
+2026/7/21 8:59:51 marker_seen=True
+2026/7/21 8:59:51 expected_seen=True expected=NETWORK_ERRORS_ZERO
+2026/7/21 8:59:51 command_success=True
+2026/7/21 8:59:54 command=ETH_IRQ_BEFORE=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test -n "$ETH_IRQ_BEFORE" && echo ETH_IRQ_BEFORE=$ETH_IRQ_BEFORE
+2026/7/21 8:59:54 output_begin
+ETH_IRQ_BEFORE=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test -n "
+$ETH_IRQ_BEFORE" && echo ETH_IRQ_BEFORE=$ETH_IRQ_BEFORE; rc=$?; echo __DONE_IRQ_
+BEFORE__ rc=$rc
+ETH_IRQ_BEFORE=52
+__DONE_IRQ_BEFORE__ rc=0
+
+2026/7/21 8:59:54 output_end
+2026/7/21 8:59:54 marker_seen=True
+2026/7/21 8:59:54 expected_seen=True expected=ETH_IRQ_BEFORE=
+2026/7/21 8:59:54 command_success=True
+2026/7/21 8:59:56 command=cat /proc/interrupts
+2026/7/21 8:59:56 output_begin
+cat /proc/interrupts; rc=$?; echo __DONE_IRQ_BEFORE__ rc=$rc
+           CPU0       
+ 18:         55  LoongArch   2  eth0
+ 19:       6723  LoongArch   3  ttyS0
+ 23:          0  LoongArch   7  1fe04000.ps2
+ 27:       2373  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_BEFORE__ rc=0
+
+2026/7/21 8:59:56 output_end
+2026/7/21 8:59:56 marker_seen=True
+2026/7/21 8:59:56 expected_seen=True expected=timer
+2026/7/21 8:59:56 command_success=True
+2026/7/21 8:59:57 command=ping -c 1 -W 2 10.90.50.43
+2026/7/21 8:59:57 output_begin
+ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_A__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=3.990 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 3.990/3.990/3.990 ms
+__DONE_PING_A__ rc=0
+
+2026/7/21 8:59:57 output_end
+2026/7/21 8:59:57 marker_seen=True
+2026/7/21 8:59:57 expected_seen=True expected=0% packet loss
+2026/7/21 8:59:57 command_success=True
+2026/7/21 8:59:59 command=ping -c 1 -W 2 10.90.50.43
+2026/7/21 8:59:59 output_begin
+ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_B__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.062 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.062/2.062/2.062 ms
+__DONE_PING_B__ rc=0
+
+2026/7/21 8:59:59 output_end
+2026/7/21 8:59:59 marker_seen=True
+2026/7/21 8:59:59 expected_seen=True expected=0% packet loss
+2026/7/21 8:59:59 command_success=True
+2026/7/21 9:00:01 command=ping -c 1 -W 2 10.90.50.43
+2026/7/21 9:00:01 output_begin
+ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_C__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.310 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.310/2.310/2.310 ms
+__DONE_PING_C__ rc=0
+
+2026/7/21 9:00:01 output_end
+2026/7/21 9:00:01 marker_seen=True
+2026/7/21 9:00:01 expected_seen=True expected=0% packet loss
+2026/7/21 9:00:01 command_success=True
+2026/7/21 9:00:05 command=ETH_IRQ_AFTER=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test "$ETH_IRQ_AFTER" -gt "$ETH_IRQ_BEFORE" && echo ETH_IRQ_DELTA_OK before=$ETH_IRQ_BEFORE after=$ETH_IRQ_AFTER
+2026/7/21 9:00:05 output_begin
+ETH_IRQ_AFTER=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test "$ETH
+_IRQ_AFTER" -gt "$ETH_IRQ_BEFORE" && echo ETH_IRQ_DELTA_OK before=$ETH_IRQ_BEFOR
+E after=$ETH_IRQ_AFTER; rc=$?; echo __DONE_IRQ_DELTA__ rc=$rc
+ETH_IRQ_DELTA_OK before=52 after=70
+__DONE_IRQ_DELTA__ rc=0
+
+2026/7/21 9:00:05 output_end
+2026/7/21 9:00:05 marker_seen=True
+2026/7/21 9:00:05 expected_seen=True expected=ETH_IRQ_DELTA_OK
+2026/7/21 9:00:05 command_success=True
+2026/7/21 9:00:06 command=cat /proc/interrupts
+2026/7/21 9:00:06 output_begin
+cat /proc/interrupts; rc=$?; echo __DONE_IRQ_AFTER__ rc=$rc
+           CPU0       
+ 18:         72  LoongArch   2  eth0
+ 19:       8685  LoongArch   3  ttyS0
+ 23:          0  LoongArch   7  1fe04000.ps2
+ 27:       2591  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_AFTER__ rc=0
+
+2026/7/21 9:00:06 output_end
+2026/7/21 9:00:06 marker_seen=True
+2026/7/21 9:00:06 expected_seen=True expected=timer
+2026/7/21 9:00:06 command_success=True
+2026/7/21 9:00:08 command=nscscc-board read
+2026/7/21 9:00:08 output_begin
+nscscc-board read; rc=$?; echo __DONE_BOARD_READ__ rc=$rc
+switches=0xf6
+buttons=0x0000
+step_buttons=0x00
+__DONE_BOARD_READ__ rc=0
+
+2026/7/21 9:00:08 output_end
+2026/7/21 9:00:08 marker_seen=True
+2026/7/21 9:00:08 expected_seen=True expected=switches=
+2026/7/21 9:00:08 command_success=True
+2026/7/21 9:00:10 command=nscscc-board led 0x0000a55a
+2026/7/21 9:00:10 output_begin
+nscscc-board led 0x0000a55a; rc=$?; echo __DONE_LED__ rc=$rc
+__DONE_LED__ rc=0
+
+2026/7/21 9:00:10 output_end
+2026/7/21 9:00:10 marker_seen=True
+2026/7/21 9:00:10 command_success=True
+2026/7/21 9:00:12 command=nscscc-board display 0x20260719
+2026/7/21 9:00:12 output_begin
+nscscc-board display 0x20260719; rc=$?; echo __DONE_DISPLAY__ rc=$rc
+__DONE_DISPLAY__ rc=0
+
+2026/7/21 9:00:12 output_end
+2026/7/21 9:00:12 marker_seen=True
+2026/7/21 9:00:12 command_success=True
+2026/7/21 9:00:15 command=cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confreg/chiplab_confreg/display
+2026/7/21 9:00:15 output_begin
+cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confre
+g/chiplab_confreg/display; rc=$?; echo __DONE_CONFREG_OUTPUTS__ rc=$rc
+0xa55a
+0x20260719
+__DONE_CONFREG_OUTPUTS__ rc=0
+
+2026/7/21 9:00:15 output_end
+2026/7/21 9:00:15 marker_seen=True
+2026/7/21 9:00:15 expected_seen=True expected=0x
+2026/7/21 9:00:15 command_success=True
+2026/7/21 9:00:18 command=dd if=/dev/chiplab_confreg bs=4 skip=1024 count=1 2>/dev/null | hexdump -v -e '1/4 "%08x\n"'
+2026/7/21 9:00:18 output_begin
+dd if=/dev/chiplab_confreg bs=4 skip=1024 count=1 2>/dev/null | hexdump -v -
+e '1/4 "%08x\n"'; rc=$?; [   18.160000] random: crng init done
+echo __DONE_CONFREG_CHAR_READ__ rc=$rc
+0000a55a
+__DONE_CONFREG_CHAR_READ__ rc=0
+
+2026/7/21 9:00:18 output_end
+2026/7/21 9:00:18 marker_seen=True
+2026/7/21 9:00:18 expected_seen=True expected=0000a55a
+2026/7/21 9:00:18 command_success=True
+2026/7/21 9:00:20 command=sh -c 'trap "echo SIGNAL_HANDLED" 14; kill -14 $$; echo SIGNAL_RETURNED'
+2026/7/21 9:00:20 output_begin
+sh -c 'trap "echo SIGNAL_HANDLED" 14; kill -14 $$; echo SIGNAL_RETURNED'; rc
+=$?; echo __DONE_SIGNAL__ rc=$rc
+SIGNAL_HANDLED
+SIGNAL_RETURNED
+__DONE_SIGNAL__ rc=0
+
+2026/7/21 9:00:20 output_end
+2026/7/21 9:00:20 marker_seen=True
+2026/7/21 9:00:20 expected_seen=True expected=SIGNAL_RETURNED
+2026/7/21 9:00:20 command_success=True
+2026/7/21 9:00:28 command=sh -c 'trap "echo TIMER_SIGNAL_HANDLED" 14; (sleep 1; kill -14 $$) & wait; echo TIMER_SIGNAL_RETURNED'
+2026/7/21 9:00:28 output_begin
+sh -c 'trap "echo TIMER_SIGNAL_HANDLED" 14; (sleep 1; kill -14 $$) & wait; e
+cho TIMER_SIGNAL_RETURNED'; rc=$?; echo __DONE_TIMER_SIGNAL__ rc=$rc
+TIMER_SIGNAL_HANDLED
+TIMER_SIGNAL_RETURNED
+__DONE_TIMER_SIGNAL__ rc=0
+
+2026/7/21 9:00:28 output_end
+2026/7/21 9:00:28 marker_seen=True
+2026/7/21 9:00:28 expected_seen=True expected=TIMER_SIGNAL_RETURNED
+2026/7/21 9:00:28 command_success=True
+2026/7/21 9:00:30 command=dmesg | grep -E 'altera_ps2|serio|atkbd'
+2026/7/21 9:00:30 output_begin
+dmesg | grep -E 'altera_ps2|serio|atkbd'; rc=$?; echo __DONE_PS2_PROBE__ rc=
+$rc
+[    2.292000] altera_ps2 1fe04000.ps2: base (ptrval), irq 23
+[    3.328000] atkbd serio0: keyboard reset failed on 1fe04000.ps2
+__DONE_PS2_PROBE__ rc=0
+
+2026/7/21 9:00:30 output_end
+2026/7/21 9:00:30 marker_seen=True
+2026/7/21 9:00:30 expected_seen=True expected=1fe04000.ps2
+2026/7/21 9:00:30 command_success=True
+2026/7/21 9:00:46 command=PS2_IRQ_BEFORE=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts); sleep 2; PS2_IRQ_AFTER=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts); test "$PS2_IRQ_BEFORE" = 0 && test "$PS2_IRQ_AFTER" = "$PS2_IRQ_BEFORE" && echo PS2_IDLE_OK
+2026/7/21 9:00:46 output_begin
+PS2_IRQ_BEFORE=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts); s
+leep 2; PS2_IRQ_AFTER=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts)
+; test "$PS2_IRQ_BEFORE" = 0 && test "$PS2_IRQ_AFTER" = "$PS2_IRQ_BEFORE" && ech
+o PS2_IDLE_OK; rc=$?; echo __DONE_PS2_IDLE__ rc=$rc
+PS2_IDLE_OK
+__DONE_PS2_IDLE__ rc=0
+
+2026/7/21 9:00:46 output_end
+2026/7/21 9:00:46 marker_seen=True
+2026/7/21 9:00:46 expected_seen=True expected=PS2_IDLE_OK
+2026/7/21 9:00:46 command_success=True
+2026/7/21 9:00:50 command=test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /sys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO
+2026/7/21 9:00:50 output_begin
+test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /s
+ys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO; rc=$?;
+ echo __DONE_NET_ERRORS_AFTER__ rc=$rc
+NETWORK_ERRORS_ZERO
+__DONE_NET_ERRORS_AFTER__ rc=0
+
+2026/7/21 9:00:50 output_end
+2026/7/21 9:00:50 marker_seen=True
+2026/7/21 9:00:50 expected_seen=True expected=NETWORK_ERRORS_ZERO
+2026/7/21 9:00:50 command_success=True
+2026/7/21 9:00:53 command=if dmesg | grep -E 'BUG:|Oops:|Kernel panic|Call Trace:'; then exit 1; else echo KERNEL_ERRORS_NONE; fi
+2026/7/21 9:00:53 output_begin
+if dmesg | grep -E 'BUG:|Oops:|Kernel panic|Call Trace:'; then exit 1; else 
+echo KERNEL_ERRORS_NONE; fi; rc=$?; echo __DONE_KERNEL_ERRORS__ rc=$rc
+KERNEL_ERRORS_NONE
+__DONE_KERNEL_ERRORS__ rc=0
+
+2026/7/21 9:00:53 output_end
+2026/7/21 9:00:53 marker_seen=True
+2026/7/21 9:00:53 expected_seen=True expected=KERNEL_ERRORS_NONE
+2026/7/21 9:00:53 command_success=True
+2026/7/21 9:00:55 command=dmesg | tail -100
+2026/7/21 9:00:55 output_begin
+dmesg | tail -100; rc=$?; echo __DONE_DMESG__ rc=$rc
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.004000] Console: colour dummy device 80x25
+[    0.004000] Calibrating delay loop (skipped), value calculated using timer frequency.. 400.00 BogoMIPS (lpj=800000)
+[    0.008000] pid_max: default: 32768 minimum: 301
+[    0.008000] LSM: Security Framework initializing
+[    0.008000] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.012000] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.032000] rcu: Hierarchical SRCU implementation.
+[    0.040000] devtmpfs: initialized
+[    0.048000] random: get_random_u32 called from bucket_table_alloc.isra.38+0x68/0x1e0 with crng_init=0
+[    0.052000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.056000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.060000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.292000] raid6: int32x8  gen()    24 MB/s
+[    0.360000] raid6: int32x8  xor()    16 MB/s
+[    0.428000] raid6: int32x4  gen()    28 MB/s
+[    0.496000] raid6: int32x4  xor()    18 MB/s
+[    0.564000] raid6: int32x2  gen()    17 MB/s
+[    0.632000] raid6: int32x2  xor()    12 MB/s
+[    0.700000] raid6: int32x1  gen()    10 MB/s
+[    0.768000] raid6: int32x1  xor()     7 MB/s
+[    0.768000] raid6: using algorithm int32x4 gen() 28 MB/s
+[    0.768000] raid6: .... xor() 18 MB/s, rmw enabled
+[    0.772000] raid6: using intx1 recovery algorithm
+[    0.776000] SCSI subsystem initialized
+[    0.780000] libata version 3.00 loaded.
+[    0.784000] pps_core: LinuxPPS API ver. 1 registered
+[    0.784000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.792000] clocksource: Switched to clocksource Constant
+[    0.800000] FS-Cache: Loaded
+[    0.908000] NET: Registered PF_INET protocol family
+[    0.912000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.920000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.920000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.924000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.924000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.928000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.928000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.932000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.956000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.016000] random: fast init done
+[    1.100000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.108000] SGI XFS with security attributes, quota, no debug enabled
+[    1.144000] xor: measuring software checksum speed
+[    1.296000]    8regs           :   136 MB/sec
+[    1.456000]    8regs_prefetch  :   123 MB/sec
+[    1.584000]    32regs          :   157 MB/sec
+[    1.728000]    32regs_prefetch :   134 MB/sec
+[    1.728000] xor: using function: 32regs (157 MB/sec)
+[    1.728000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.736000] io scheduler mq-deadline registered
+[    1.736000] io scheduler kyber registered
+[    1.736000] io scheduler bfq registered
+[    1.744000] IPMI message handler: version 39.2
+[    1.752000] ipmi device interface
+[    1.752000] ipmi_si: IPMI System Interface driver
+[    1.760000] ipmi_si: Unable to find any System Interface(s)
+[    1.848000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.920000] printk: console [ttyS0] disabled
+[    1.928000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.928000] printk: console [ttyS0] enabled
+[    1.936000] printk: bootconsole [early0] disabled
+[    1.952000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    1.956000] nt35510: Initializing the nt35510
+[    2.068000] nlcd nt35510: nt35510: device created correctly, reg=(ptrval)
+[    2.068000] nt35510: registered correctly with major number 248
+[    2.232000] loop: module loaded
+[    2.236000] ls1a-nand driver initializing
+[    2.244000] ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init
+[    2.276000] libphy: Fixed MDIO Bus: probed
+[    2.284000] tun: Universal TUN/TAP device driver, 1.6
+[    2.292000] altera_ps2 1fe04000.ps2: base (ptrval), irq 23
+[    2.304000] mousedev: PS/2 mouse device common for all mice
+[    2.308000] IR MCE Keyboard/mouse protocol handler initialized
+[    2.320000] hid: raw HID events driver (C) Jiri Kosina
+[    2.352000] NET: Registered PF_INET6 protocol family
+[    2.376000] Segment Routing with IPv6
+[    2.376000] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.392000] sctp: Hash tables configured (bind 1024/1024)
+[    2.432000] Btrfs loaded, crc32c=crc32c-generic, zoned=yes
+[    3.328000] atkbd serio0: keyboard reset failed on 1fe04000.ps2
+[    5.728000] Key type encrypted registered
+[    5.904000] Freeing unused kernel image (initmem) memory: 4352K
+[    5.908000] This architecture does not have kernel memory protection.
+[    5.908000] Run /init as init process
+[    5.912000]   with arguments:
+[    5.912000]     /init
+[    5.912000]   with environment:
+[    5.912000]     HOME=/
+[    5.912000]     TERM=linux
+[    9.440000] dev 1:Link OK 4
+[    9.440000]  dmfe: Change Speed to 100Mhz full duplex
+[   18.160000] random: crng init done
+__DONE_DMESG__ rc=0
+
+2026/7/21 9:00:55 output_end
+2026/7/21 9:00:55 marker_seen=True
+2026/7/21 9:00:55 expected_seen=True expected=ITC MAC
+2026/7/21 9:00:55 command_success=True
+2026/7/21 9:00:56 command=sync
+2026/7/21 9:00:56 output_begin
+sync; rc=$?; echo __DONE_SYNC__ rc=$rc
+__DONE_SYNC__ rc=0
+
+2026/7/21 9:00:56 output_end
+2026/7/21 9:00:56 marker_seen=True
+2026/7/21 9:00:56 command_success=True
+2026/7/21 9:00:56 result=success
