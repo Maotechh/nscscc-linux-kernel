@@ -18,6 +18,10 @@
 #include <linux/errno.h>
 #include <linux/cdev.h>
 #include <linux/uaccess.h>
+#include <linux/fb.h>
+#include <linux/list.h>
+#include <linux/mutex.h>
+#include <linux/vmalloc.h>
 #include <asm/delay.h>
 
 #define DRV_NAME "nt35510"
@@ -27,6 +31,9 @@
 #define NT35510_INST_OFFSET 0x0
 #define NT35510_DATA_OFFSET 0x1
 #define BYTES_PER_PIXEL 2
+#define NT35510_DEFAULT_XRES 480
+#define NT35510_DEFAULT_YRES 800
+#define NT35510_DEFAULT_DEFIO_HZ 20
 
 static int majorNumber;
 static struct class *nt35510_class;
@@ -39,11 +46,16 @@ static struct nt35510_drvdata {
 	void __iomem *regs;
 	u32 xres, yres;
 	loff_t curr_off;
+	struct mutex lock;
+	void *fbmem;
+	size_t fbsize;
+	struct fb_info *fb_info;
+	struct fb_deferred_io fbdefio;
 } * nt35510s[MAX_LCD_NUM];
 
 static struct nt35510_drvdata default_nt35510_drvdata = {
-	.xres = 480,
-	.yres = 800,
+	.xres = NT35510_DEFAULT_XRES,
+	.yres = NT35510_DEFAULT_YRES,
 	.isOpen = 0,
 };
 
@@ -476,22 +488,303 @@ static void nt35510_init(const struct nt35510_drvdata *drvdata)
 	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2900);
 }
 
-static int nt35510_seek_point(const struct nt35510_drvdata *drvdata, u32 x,
-		u32 y)
+/*
+ * Set an inclusive address window.  The original character-device path only
+ * programmed the start coordinate, which is sufficient for a linear write
+ * but does not describe a framebuffer rectangle to the controller.
+ */
+static int nt35510_set_window(const struct nt35510_drvdata *drvdata,
+			u32 x0, u32 y0, u32 x1, u32 y1)
 {
-	if (x < drvdata->xres && y < drvdata->yres) {
-		nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A00);
-		nt35510_out32(drvdata, NT35510_DATA_OFFSET, (x >> 8) & 0xff);
-		nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A01);
-		nt35510_out32(drvdata, NT35510_DATA_OFFSET, x & 0xff);
-		nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B00);
-		nt35510_out32(drvdata, NT35510_DATA_OFFSET, (y >> 8) & 0xff);
-		nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B01);
-		nt35510_out32(drvdata, NT35510_DATA_OFFSET, y & 0xff);
-		return 0;
-	} else {
+	if (x0 > x1 || y0 > y1 || x1 >= drvdata->xres || y1 >= drvdata->yres)
 		return -ERANGE;
+
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A00);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, (x0 >> 8) & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A01);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, x0 & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A02);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, (x1 >> 8) & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2A03);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, x1 & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B00);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, (y0 >> 8) & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B01);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, y0 & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B02);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, (y1 >> 8) & 0xff);
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2B03);
+	nt35510_out32(drvdata, NT35510_DATA_OFFSET, y1 & 0xff);
+	return 0;
+}
+
+static void nt35510_flush_rect_locked(struct nt35510_drvdata *drvdata,
+			u32 x0, u32 y0, u32 x1, u32 y1)
+{
+	u32 x, y;
+	u16 *pixels = drvdata->fbmem;
+
+	if (!pixels || nt35510_set_window(drvdata, x0, y0, x1, y1))
+		return;
+
+	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2C00);
+	for (y = y0; y <= y1; y++) {
+		for (x = x0; x <= x1; x++)
+			nt35510_out32(drvdata, NT35510_DATA_OFFSET,
+					pixels[y * drvdata->xres + x]);
 	}
+}
+
+static void nt35510_flush_rows_locked(struct nt35510_drvdata *drvdata,
+			u32 y0, u32 y1)
+{
+	if (!drvdata->yres || y0 >= drvdata->yres)
+		return;
+	if (y1 >= drvdata->yres)
+		y1 = drvdata->yres - 1;
+	nt35510_flush_rect_locked(drvdata, 0, y0, drvdata->xres - 1, y1);
+}
+
+static void nt35510_flush_bytes_locked(struct nt35510_drvdata *drvdata,
+		unsigned long start, unsigned long end)
+{
+	u32 y0, y1;
+
+	if (!drvdata->fbmem || start >= end || start >= drvdata->fbsize)
+		return;
+	if (end > drvdata->fbsize)
+		end = drvdata->fbsize;
+	y0 = start / (drvdata->xres * BYTES_PER_PIXEL);
+	y1 = (end - 1) / (drvdata->xres * BYTES_PER_PIXEL);
+	nt35510_flush_rows_locked(drvdata, y0, y1);
+}
+
+static void nt35510fb_deferred_io(struct fb_info *info,
+		struct list_head *pagelist)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+	struct page *page;
+	unsigned long first = 0, end = 0, page_start;
+
+	/* The page list is sorted by index.  Coalesce adjacent pages into rows. */
+	mutex_lock(&drvdata->lock);
+	list_for_each_entry(page, pagelist, lru) {
+		page_start = page->index << PAGE_SHIFT;
+		if (!end) {
+			first = page_start;
+			end = page_start + PAGE_SIZE;
+			continue;
+		}
+		if (page_start == end) {
+			end += PAGE_SIZE;
+			continue;
+		}
+		nt35510_flush_bytes_locked(drvdata, first, end);
+		first = page_start;
+		end = page_start + PAGE_SIZE;
+	}
+	if (end)
+		nt35510_flush_bytes_locked(drvdata, first, end);
+	mutex_unlock(&drvdata->lock);
+}
+
+static int nt35510fb_check_var(struct fb_var_screeninfo *var,
+		struct fb_info *info)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+
+	if (var->xres != drvdata->xres || var->yres != drvdata->yres ||
+	    var->xres_virtual != drvdata->xres ||
+	    var->yres_virtual != drvdata->yres || var->bits_per_pixel != 16)
+		return -EINVAL;
+	var->xoffset = 0;
+	var->yoffset = 0;
+	return 0;
+}
+
+static int nt35510fb_setcolreg(unsigned int regno, unsigned int red,
+		unsigned int green, unsigned int blue, unsigned int transp,
+		struct fb_info *info)
+{
+	u32 value;
+
+	if (regno >= 16)
+		return -EINVAL;
+	red >>= 11;
+	green >>= 10;
+	blue >>= 11;
+	value = (red << 11) | (green << 5) | blue;
+	((u32 *)info->pseudo_palette)[regno] = value;
+	return 0;
+}
+
+static ssize_t nt35510fb_write(struct fb_info *info, const char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+	loff_t start = *ppos;
+	ssize_t ret;
+
+	ret = fb_sys_write(info, buf, count, ppos);
+	if (ret > 0) {
+		mutex_lock(&drvdata->lock);
+		nt35510_flush_bytes_locked(drvdata, start, start + ret);
+		mutex_unlock(&drvdata->lock);
+	}
+	return ret;
+}
+
+static void nt35510fb_fillrect(struct fb_info *info,
+		const struct fb_fillrect *rect)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+	u32 x1, y1;
+
+	sys_fillrect(info, rect);
+	if (!rect->width || !rect->height || rect->dx >= drvdata->xres ||
+	    rect->dy >= drvdata->yres)
+		return;
+	x1 = min(rect->dx + rect->width, drvdata->xres) - 1;
+	y1 = min(rect->dy + rect->height, drvdata->yres) - 1;
+	mutex_lock(&drvdata->lock);
+	nt35510_flush_rect_locked(drvdata, rect->dx, rect->dy, x1, y1);
+	mutex_unlock(&drvdata->lock);
+}
+
+static void nt35510fb_copyarea(struct fb_info *info,
+		const struct fb_copyarea *area)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+	u32 x1, y1;
+
+	sys_copyarea(info, area);
+	if (!area->width || !area->height || area->dx >= drvdata->xres ||
+	    area->dy >= drvdata->yres)
+		return;
+	x1 = min(area->dx + area->width, drvdata->xres) - 1;
+	y1 = min(area->dy + area->height, drvdata->yres) - 1;
+	mutex_lock(&drvdata->lock);
+	nt35510_flush_rect_locked(drvdata, area->dx, area->dy, x1, y1);
+	mutex_unlock(&drvdata->lock);
+}
+
+static void nt35510fb_imageblit(struct fb_info *info,
+		const struct fb_image *image)
+{
+	struct nt35510_drvdata *drvdata = info->par;
+	u32 x1, y1;
+
+	sys_imageblit(info, image);
+	if (!image->width || !image->height || image->dx >= drvdata->xres ||
+	    image->dy >= drvdata->yres)
+		return;
+	x1 = min(image->dx + image->width, drvdata->xres) - 1;
+	y1 = min(image->dy + image->height, drvdata->yres) - 1;
+	mutex_lock(&drvdata->lock);
+	nt35510_flush_rect_locked(drvdata, image->dx, image->dy, x1, y1);
+	mutex_unlock(&drvdata->lock);
+}
+
+static const struct fb_ops nt35510fb_ops = {
+	.owner = THIS_MODULE,
+	.fb_read = fb_sys_read,
+	.fb_write = nt35510fb_write,
+	.fb_check_var = nt35510fb_check_var,
+	.fb_setcolreg = nt35510fb_setcolreg,
+	.fb_fillrect = nt35510fb_fillrect,
+	.fb_copyarea = nt35510fb_copyarea,
+	.fb_imageblit = nt35510fb_imageblit,
+};
+
+static int nt35510fb_register(struct platform_device *pdev,
+		struct nt35510_drvdata *drvdata)
+{
+	struct fb_info *info;
+	int ret;
+
+	drvdata->fbsize = drvdata->xres * drvdata->yres * BYTES_PER_PIXEL;
+	drvdata->fbmem = vzalloc(drvdata->fbsize);
+	if (!drvdata->fbmem)
+		return -ENOMEM;
+
+	info = framebuffer_alloc(0, &pdev->dev);
+	if (!info) {
+		vfree(drvdata->fbmem);
+		drvdata->fbmem = NULL;
+		return -ENOMEM;
+	}
+
+	drvdata->fb_info = info;
+	info->par = drvdata;
+	info->screen_base = (void __iomem *)drvdata->fbmem;
+	info->screen_size = drvdata->fbsize;
+	info->fbops = &nt35510fb_ops;
+	info->flags = FBINFO_FLAG_DEFAULT | FBINFO_VIRTFB;
+	strscpy(info->fix.id, "nt35510", sizeof(info->fix.id));
+	info->fix.type = FB_TYPE_PACKED_PIXELS;
+	info->fix.visual = FB_VISUAL_TRUECOLOR;
+	info->fix.smem_len = drvdata->fbsize;
+	info->fix.line_length = drvdata->xres * BYTES_PER_PIXEL;
+	info->fix.accel = FB_ACCEL_NONE;
+	info->var.xres = drvdata->xres;
+	info->var.yres = drvdata->yres;
+	info->var.xres_virtual = drvdata->xres;
+	info->var.yres_virtual = drvdata->yres;
+	info->var.bits_per_pixel = 16;
+	info->var.red.offset = 11;
+	info->var.red.length = 5;
+	info->var.green.offset = 5;
+	info->var.green.length = 6;
+	info->var.blue.offset = 0;
+	info->var.blue.length = 5;
+	info->var.activate = FB_ACTIVATE_NOW;
+	info->pseudo_palette = devm_kcalloc(&pdev->dev, 16, sizeof(u32),
+			GFP_KERNEL);
+	if (!info->pseudo_palette) {
+		ret = -ENOMEM;
+		goto err_release;
+	}
+
+	ret = fb_alloc_cmap(&info->cmap, 16, 0);
+	if (ret)
+		goto err_release;
+
+	drvdata->fbdefio.delay = max_t(unsigned long, 1,
+			HZ / NT35510_DEFAULT_DEFIO_HZ);
+	drvdata->fbdefio.deferred_io = nt35510fb_deferred_io;
+	info->fbdefio = &drvdata->fbdefio;
+	fb_deferred_io_init(info);
+
+	ret = register_framebuffer(info);
+	if (ret)
+		goto err_defio;
+
+	fb_info(info, "NT35510 shadow framebuffer, %ux%u RGB565, %zu bytes\n",
+		drvdata->xres, drvdata->yres, drvdata->fbsize);
+	return 0;
+
+err_defio:
+	fb_deferred_io_cleanup(info);
+	fb_dealloc_cmap(&info->cmap);
+err_release:
+	framebuffer_release(info);
+	drvdata->fb_info = NULL;
+	vfree(drvdata->fbmem);
+	drvdata->fbmem = NULL;
+	return ret;
+}
+
+static void nt35510fb_unregister(struct nt35510_drvdata *drvdata)
+{
+	if (!drvdata->fb_info)
+		return;
+	unregister_framebuffer(drvdata->fb_info);
+	fb_deferred_io_cleanup(drvdata->fb_info);
+	fb_dealloc_cmap(&drvdata->fb_info->cmap);
+	framebuffer_release(drvdata->fb_info);
+	drvdata->fb_info = NULL;
+	vfree(drvdata->fbmem);
+	drvdata->fbmem = NULL;
 }
 
 static int nt35510_open(struct inode *inode, struct file *file)
@@ -524,56 +817,29 @@ static ssize_t nt35510_write(struct file *file, const char __user *buf,
 		size_t size, loff_t *poss)
 {
 	struct nt35510_drvdata *drvdata = file->private_data;
-	unsigned long p = drvdata->curr_off / BYTES_PER_PIXEL;
-	unsigned int count = size / BYTES_PER_PIXEL;
-	u16 *data;
-	int ret = 0;
+	unsigned long start = *poss;
+	size_t count;
+	ssize_t ret;
 
-	// printk(KERN_ALERT "nt35510_write: p=%ld, count=%d\n", p, count);
-
-	dev_dbg(drvdata->device, "nt35510_write: p=%ld, count=%d", p, count);
-	if (p >= drvdata->xres * drvdata->yres)
+	if (start >= drvdata->fbsize)
 		return 0;
-	if (count > drvdata->xres * drvdata->yres - p)
-		count = drvdata->xres * drvdata->yres - p;
+	count = min_t(size_t, size, drvdata->fbsize - start);
+	if (count & (BYTES_PER_PIXEL - 1))
+		count--;
+	if (!count)
+		return 0;
 
-	data = (u16 *)kmalloc(count * sizeof(*data), GFP_KERNEL);
-	if (!data) {
-		ret = -ENOMEM;
-		return ret;
-	}
-	if (copy_from_user(data, buf, count * sizeof(*data))) {
-		printk(KERN_ALERT "nt35510_write: copy failed\n");
-
+	mutex_lock(&drvdata->lock);
+	if (copy_from_user((u8 *)drvdata->fbmem + start, buf, count)) {
 		ret = -EFAULT;
 	} else {
-		int i;
-		int pp = 0;
-		ret = 0;
-		while(count > 0) {
-			// printk(KERN_ALERT "nt35510_write: count = %d\n", count);
-
-			int writecnt = drvdata->xres - (p % drvdata->xres);
-			nt35510_seek_point(drvdata, p % drvdata->xres,
-				p / drvdata->xres);
-			nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2C00);
-			if(writecnt > count)
-				writecnt = count;
-			for (i = 0; i < writecnt; i++) {
-				// printk(KERN_ALERT "nt35510_write: write[%d] = %x\n", i, data[i + pp]);
-				nt35510_out32(drvdata, NT35510_DATA_OFFSET,
-						data[i + pp]);
-			}
-			count -= writecnt;
-			p += writecnt;
-			pp += writecnt;
-			ret += BYTES_PER_PIXEL * writecnt;
-			file->f_pos += BYTES_PER_PIXEL * writecnt;
-			drvdata->curr_off += BYTES_PER_PIXEL * writecnt;
-		}
+		*poss += count;
+		file->f_pos = *poss;
+		drvdata->curr_off = *poss;
+		nt35510_flush_bytes_locked(drvdata, start, start + count);
+		ret = count;
 	}
-	kfree(data);
-	dev_dbg(drvdata->device, "nt35510_write: ret=%d", ret);
+	mutex_unlock(&drvdata->lock);
 	return ret;
 }
 
@@ -601,7 +867,7 @@ static loff_t nt35510_llseek(struct file *file, loff_t offset, int whence)
 		return -EINVAL;
 	}
 	if ((newpos < 0) ||
-			(newpos >= drvdata->xres * drvdata->yres * BYTES_PER_PIXEL))
+			(newpos > drvdata->xres * drvdata->yres * BYTES_PER_PIXEL))
 		return -EINVAL;
 
 	file->f_pos = newpos;
@@ -622,6 +888,7 @@ static int nt35510_of_probe(struct platform_device *pdev)
 	struct nt35510_drvdata *drvdata;
 	struct resource *res;
 	struct device *device;
+	int ret;
 
 	drvdata = devm_kzalloc(&pdev->dev, sizeof(*drvdata), GFP_KERNEL);
 	if (!drvdata)
@@ -629,26 +896,42 @@ static int nt35510_of_probe(struct platform_device *pdev)
 	*drvdata = default_nt35510_drvdata;
 	dev_set_drvdata(&pdev->dev, drvdata);
 	drvdata->device = &pdev->dev;
+	mutex_init(&drvdata->lock);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	drvdata->regs = devm_ioremap_resource(&pdev->dev, res);
-	if (IS_ERR(drvdata->regs))
-		return PTR_ERR(drvdata->regs);
+	if (IS_ERR(drvdata->regs)) {
+		ret = PTR_ERR(drvdata->regs);
+		goto err_mutex;
+	}
 
 	drvdata->regs_phys = res->start;
+	mutex_lock(&drvdata->lock);
+	nt35510_init(drvdata);
+	mutex_unlock(&drvdata->lock);
+
+	ret = nt35510fb_register(pdev, drvdata);
+	if (ret)
+		goto err_mutex;
 
 	device = device_create(nt35510_class, NULL, MKDEV(majorNumber, 0), NULL,
 			"nt35510");
-	if (IS_ERR(device))
-		return PTR_ERR(device);
+	if (IS_ERR(device)) {
+		ret = PTR_ERR(device);
+		nt35510fb_unregister(drvdata);
+		goto err_mutex;
+	}
 
 	drvdata->device = device;
-	nt35510_init(drvdata);
 	nt35510s[0] = drvdata;
-	dev_info(device, "nt35510: device created correctly, reg=%p\n",
-			drvdata->regs); // Made it! device was initialized
+	dev_info(device, "nt35510: character device and fb0 ready, %ux%u, reg=%p\n",
+			drvdata->xres, drvdata->yres, drvdata->regs);
 
 	return 0;
+
+err_mutex:
+	mutex_destroy(&drvdata->lock);
+	return ret;
 }
 
 static int nt35510_remove(struct platform_device *pdev)
@@ -659,6 +942,8 @@ static int nt35510_remove(struct platform_device *pdev)
 	}
 	device_destroy(nt35510_class, MKDEV(majorNumber, 0));
 	nt35510s[0] = NULL;
+	nt35510fb_unregister(drvdata);
+	mutex_destroy(&drvdata->lock);
 	return 0;
 }
 

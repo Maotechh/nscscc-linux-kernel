@@ -1,0 +1,49 @@
+#!/bin/sh
+
+pidfile=/run/nscscc-desktop.pid
+logfile=/var/log/nscscc-desktop.log
+
+start_desktop() {
+    if [ ! -e /dev/fb0 ]; then
+        echo "nscscc-desktop: /dev/fb0 is unavailable; desktop not started"
+        return 0
+    fi
+    if [ -s "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
+        return 0
+    fi
+
+    mkdir -p /run /tmp/.X11-unix /var/log
+    chmod 1777 /tmp/.X11-unix
+    rm -f /tmp/.X0-lock /tmp/.X11-unix/X0
+    export HOME=/root USER=root LOGNAME=root DISPLAY=:0
+    xinit /root/.xinitrc -- /usr/bin/Xorg :0 \
+        -config /etc/X11/xorg.conf -nolisten tcp -noreset \
+        >"$logfile" 2>&1 &
+    echo $! >"$pidfile"
+    echo "nscscc-desktop: xinit started as PID $(cat "$pidfile")"
+}
+
+stop_desktop() {
+    if [ -s "$pidfile" ]; then
+        kill "$(cat "$pidfile")" 2>/dev/null || true
+        rm -f "$pidfile"
+    fi
+    killall fluxbox xterm Xorg 2>/dev/null || true
+}
+
+case "$1" in
+    start)
+        start_desktop
+        ;;
+    stop)
+        stop_desktop
+        ;;
+    restart)
+        stop_desktop
+        start_desktop
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}" >&2
+        exit 1
+        ;;
+esac

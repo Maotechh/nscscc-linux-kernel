@@ -43,11 +43,17 @@ config CHIPLAB_CONFREG
 
 config CHIPLAB_NT35510
 	tristate "Chiplab NT35510 parallel LCD character device"
-	depends on OF && HAS_IOMEM
+	depends on OF && HAS_IOMEM && FB
+	select FB_DEFERRED_IO
+	select FB_SYS_COPYAREA
+	select FB_SYS_FILLRECT
+	select FB_SYS_FOPS
+	select FB_SYS_IMAGEBLIT
 	help
-	  Enable the character device driver for the NT35510 parallel LCD
-	  controller used by the experiment-box LCD connector. The driver
-	  creates /dev/nt35510 and expects a lcd,nt35510 device tree node.
+	  Enable the NT35510 parallel LCD driver used by the experiment-box LCD
+	  connector. The driver creates a standard RGB565 framebuffer and the
+	  compatible /dev/nt35510 character device. It expects a lcd,nt35510
+	  device tree node.
 
 config PRINTER
 	tristate "Parallel printer support"
