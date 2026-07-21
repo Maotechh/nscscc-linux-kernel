@@ -1,40 +1,115 @@
 # nscscc-linux
 
-2026 龙芯杯团体赛 Linux 内核，fork 自 [loongson-edu/la32r-Linux](https://gitee.com/loongson-edu/la32r-Linux)（branch `la32r-new-world`）。
+2026 龙芯杯团体赛 Linux 内核，fork 自
+[loongson-edu/la32r-Linux](https://gitee.com/loongson-edu/la32r-Linux) 的
+`la32r-new-world` 分支。当前 main 面向 NSCSCC 实验箱的 100 MHz UART、
+DMFE、confreg、NT35510 framebuffer 和 PS/2 控制器。
 
-## 本分支修改（`nscscc` vs 上游）
+## 当前 main 已实现
 
-| 文件 | 修改 | 原因 |
-|------|------|------|
-| `loongson32_ls.dts` | clock-frequency: 33M → **100M** | 竞赛 SoC UART 挂 sys_clk=100MHz |
-| `serial.c` | uartclk: 33M → **100M**; 修正 memset 覆盖 bug | 原代码 memset 在赋值后执行，导致 uartclk=0 |
+- 保留原有 UART clock 修正：device tree 和 NS16550 使用 `100000000`，并
+  修复 `serial.c` 中覆盖 `uartclk` 的 `memset` 问题。
+- 内嵌可重复构建的 Buildroot initramfs，包含静态 BusyBox、`/init`、网络
+  工具和 `/bin/sh`。
+- NT35510 character device 与 `480x800 RGB565` framebuffer，设备节点为
+  `/dev/nt35510` 和 `/dev/fb0`。
+- X.Org、fbdev、evdev、eudev、Fluxbox 和 XTerm 的轻量 X11 桌面。它不是
+  GNOME，也不依赖 GPU 或 OpenGL，适合实验箱的 128 MiB DDR。
+- PS/2 serio、keyboard 和 mouse protocol 支持，以及 Linux evdev 接口。
+- build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
+  manifest，便于校验不同主机之间的文件身份。
 
-> 如果用实验箱 SoC（loongson），需把两处的 100000000 改回 33000000。
+## 最近 main 变更
 
-## 编译
+从 GitHub baseline `518625445067c9265b8ba38fbc9b43491fdea006` 到 desktop
+validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
+
+- `3118ab6ff`：加入 framebuffer desktop image、X.Org 配置、Fluxbox、XTerm、
+  eudev 和桌面启动脚本。
+- `721f911cc`、`95818723b`、`cc75d34b1`：记录 userspace 身份，修正启动
+  用户、runtime loader、Xorg 模块加载和启动等待逻辑。
+- `0605fbd80`、`3d8e8c8e3`：固定内嵌 initramfs 路径和 kernel build timestamp，
+  使两个独立输出可重复。
+- `7c5518b35`、`9dc187ead`：增加 NT35510 full-frame data path 检查，并兼容
+  BusyBox 的 `1+0 records out` 输出。
+- `7236be01b`：加入 EPYC2 reproducibility 记录和两次完整 FPGA Linux 桌面
+  验证证据。
+
+## 构建
+
+构建应在 x86-64 Linux 主机（例如 EPYC2）完成，使用官方 LoongArch32
+Reduced GCC 8.3 toolchain：
 
 ```bash
-# 工具链 (GCC 8.3.0)
-export PATH=/path/to/loongson-gnu-toolchain-8.3-*/bin:$PATH
-export CROSS_COMPILE=loongarch32r-linux-gnusf-
 export ARCH=loongarch
+export CROSS_COMPILE=/path/to/toolchain/bin/loongarch32r-linux-gnusf-
 
-# 配置 & 编译
-make la32_defconfig
-# 如果有 initramfs: 编辑 .config → CONFIG_INITRAMFS_SOURCE=initrd_pck32
-make -j$(nproc)
+scripts/nscscc/buildroot-desktop.sh \
+  /absolute/path/to/buildroot-work \
+  /absolute/path/to/toolchain \
+  /absolute/path/to/buildroot-artifacts
 
-# 裁剪符号减小体积
-loongarch32r-linux-gnusf-strip vmlinux
+scripts/nscscc/build-kernel.sh \
+  /absolute/path/to/buildroot-work/output/target \
+  /absolute/path/to/kernel-output \
+  /absolute/path/to/kernel-artifacts
 ```
 
-## 部署
+桌面 image 的构建细节、Buildroot patch identity、runtime loader 处理和
+initramfs 约束见 [`Documentation/nscscc/desktop-buildroot.md`](Documentation/nscscc/desktop-buildroot.md)。
 
-- **实验箱**: PMON `load tftp://<host>/vmlinux` → `g console=ttyS0,115200 rdinit=/sbin/init`
-- **竞赛 SoC**: JTAG-AXI 写 vmlinux.bin 到 DDR3(0x300000)，启动桩写 0x1c000000
+## U-Boot TFTP 启动
+
+Windows Tftpd32 root 使用 `10.90.50.43`，实验箱使用 `10.90.50.44`。只有在
+TFTP 字节数和 CRC32 与 manifest 一致时才运行 `bootelf`：
+
+```text
+setenv ipaddr 10.90.50.44
+setenv serverip 10.90.50.43
+setenv netmask 255.255.255.0
+setenv ethaddr 00:98:76:64:32:19
+ping 10.90.50.43
+tftpboot 0xa3000000 vmlinux-7c5518b35-desktop
+crc32 0xa3000000 ${filesize}
+bootelf -p 0xa3000000 g console=ttyS0,115200 rdinit=/init loglevel=8
+```
+
+当前 verified artifact：
+
+```text
+size=30595600
+sha256=830afcbb91ebb98e871a0645d6c08448b2ea4a2201fb33853afab872acadb978
+crc32=13433a3f
+entry=0xa0b8d6d0
+first_load=0xa0300000
+tftp_address=0xa3000000
+```
+
+## 2026-07-22 硬件验证
+
+从 FPGA programming 开始连续完成两次独立运行。两次均通过 Vivado
+2023.2、TFTP、U-Boot CRC32、Linux shell、DMFE、confreg、PS/2 idle、
+`/dev/nt35510` full-frame write、`/dev/fb0`、X.Org、Fluxbox 和 XTerm 检查。
+两次 TFTP 都传输 `30595600` 字节，Tftpd32 记录 `0 blk resent`，validator
+返回 `result=success`。
+
+详细报告见
+[`Documentation/nscscc/hardware-validation-desktop-20260722.md`](Documentation/nscscc/hardware-validation-desktop-20260722.md)，
+artifact contract 见
+[`Documentation/nscscc/evidence/vmlinux-7c5518b35-desktop.manifest`](Documentation/nscscc/evidence/vmlinux-7c5518b35-desktop.manifest)。
+
+## 当前限制
+
+- framebuffer 和 NT35510 写入证明 Linux device path 与 framebuffer ABI，不能
+  代替物理观察。当前 `panel_status=not_observed`，没有宣称 LCD 已显示图像。
+- 本次验证没有连接 PS/2 keyboard 或 mouse，因此没有宣称 key event、pointer
+  event 或实际输入操作已经通过。
+- 单个 PS/2 controller 不能同时连接两个独立 PS/2 设备；同时使用 keyboard
+  和 mouse 需要 Chiplab 增加第二个 controller 或 USB host controller。
 
 ## 依赖
 
-- 交叉工具链: `loongarch32r-linux-gnusf-` (GCC 8.3.0)
-- 主机: flex bison bc rsync libssl-dev
-- initramfs: 可用 [la32r-buildroot](https://gitee.com/loongson-edu/la32r-buildroot) 或 busybox 制作
+- 交叉工具链：`loongarch32r-linux-gnusf-`，GCC 8.3.0。
+- 主机工具：`flex`、`bison`、`bc`、`rsync`、`libssl-dev`。
+- Buildroot source 和 `nscscc24-jit-thu/Buildroot` patch，详见 desktop
+  build document。
