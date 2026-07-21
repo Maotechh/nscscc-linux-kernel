@@ -1,0 +1,7 @@
+
+
+Path : C:\Users\Henry\fpga-lab\diagnostic\linux\bitstreams\soc_top-ad6551-cpu40-uncore100-lcd-cs-h18.bit
+Hash : 4152FEAB85D893ACDE9B37004BE9E37DCF71562A58E93DCDCFB85FE2CA33E39D
+
+
+

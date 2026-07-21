@@ -1,0 +1,723 @@
+﻿
+u-boot@LoongsonSoC# setenv ipaddr 10.90.50.44; echo __SET_IP__
+__SET_IP__
+u-boot@LoongsonSoC# setenv serverip 10.90.50.43; echo __SET_SERVER__
+__SET_SERVER__
+u-boot@LoongsonSoC# setenv netmask 255.255.255.0; echo __SET_MASK__
+__SET_MASK__
+u-boot@LoongsonSoC# setenv ethaddr 00:98:76:64:32:19; echo __SET_MAC__
+__SET_MAC__
+u-boot@LoongsonSoC# ping 10.90.50.43; echo __PING_DONE__
+Using ethernet@0x9ff00000 device
+host 10.90.50.43 is alive
+__PING_DONE__
+u-boot@LoongsonSoC# tftpboot 0xa3000000 vmlinux-7c5518b35-desktop; echo __TFTP_DONE__
+Using ethernet@0x9ff00000 device
+TFTP from server 10.90.50.43; our IP address is 10.90.50.44
+Filename 'vmlinux-7c5518b35-desktop'.
+Load address: 0xa3000000
+Loading: #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #################################################################
+         #############################################################
+         267.6 KiB/s
+done
+Bytes transferred = 30595600 (1d2da10 hex)
+__TFTP_DONE__
+u-boot@LoongsonSoC# crc32 0xa3000000 ${filesize}; echo __CRC_DONE__
+CRC32 for a3000000 ... a4d2da0f ==> 13433a3f
+__CRC_DONE__
+u-boot@LoongsonSoC# bootelf -p 0xa3000000 g console=ttyS0,115200 rdinit=/init loglevel=8
+## Starting application at 0xa0b8d6d0 ...
+do_bootelf_exec...
+[    0.000000] Linux version 5.14.0-rc2-g7c5518b359cd (nscscc@nscscc-build) (loongarch32r-linux-gnusf-gcc (LoongArch GNU toolchain LA32 v2.0 (20230903)) 8.3.0, GNU ld (LoongArch GNU toolchain LA32 v2.0 20230903) 2.31.1.20190122) #1 PREEMPT 1970-01-01 00:00:00 UTC
+[    0.000000] Standard 32-bit Loongson Processor probed
+[    0.000000] the link is empty!
+[    0.000000] Scan bootparam failed
+[    0.000000] printk: bootconsole [early0] enabled
+[    0.000000] Can't find EFI system table.
+[    0.000000] start_pfn=0x0, end_pfn=0x8000, num_physpages:0x8000
+[    0.000000] The BIOS Version: (null)
+[    0.000000] Initrd not found or empty - disabling initrd
+[    0.000000] CPU0 revision is: 00004200 (Loongson-32bit)
+[    0.000000] Primary instruction cache 8kB, 2-way, VIPT, linesize 16 bytes.
+[    0.000000] Primary data cache 8kB, 2-way, VIPT, no aliases, linesize 16 bytes
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x00000000ffffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] eentry = 0xa0210000,tlbrentry = 0xa0201000
+[    0.000000] pcpu-alloc: s0 r0 d32768 u32768 alloc=1*32768
+[    0.000000] pcpu-alloc: [0] 0 
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 32480
+[    0.000000] Kernel command line: earlycon
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 97292K/131072K available (8794K kernel code, 1142K rwdata, 1648K rodata, 18296K init, 496K bss, 33780K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu:     RCU event tracing is enabled.
+[    0.000000]  Trampoline variant of Tasks RCU enabled.
+[    0.000000]  Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.004000] Console: colour dummy device 80x25
+[    0.004000] Calibrating delay loop (skipped), value calculated using timer frequency.. 400.00 BogoMIPS (lpj=800000)
+[    0.008000] pid_max: default: 32768 minimum: 301
+[    0.008000] LSM: Security Framework initializing
+[    0.008000] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.012000] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.032000] rcu: Hierarchical SRCU implementation.
+[    0.040000] devtmpfs: initialized
+[    0.048000] random: get_random_u32 called from bucket_table_alloc.isra.38+0x68/0x1e0 with crng_init=0
+[    0.052000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.056000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.060000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.288000] raid6: int32x8  gen()    24 MB/s
+[    0.356000] raid6: int32x8  xor()    16 MB/s
+[    0.424000] raid6: int32x4  gen()    28 MB/s
+[    0.492000] raid6: int32x4  xor()    18 MB/s
+[    0.560000] raid6: int32x2  gen()    17 MB/s
+[    0.628000] raid6: int32x2  xor()    12 MB/s
+[    0.696000] raid6: int32x1  gen()    10 MB/s
+[    0.764000] raid6: int32x1  xor()     7 MB/s
+[    0.764000] raid6: using algorithm int32x4 gen() 28 MB/s
+[    0.764000] raid6: .... xor() 18 MB/s, rmw enabled
+[    0.768000] raid6: using intx1 recovery algorithm
+[    0.772000] SCSI subsystem initialized
+[    0.776000] libata version 3.00 loaded.
+[    0.780000] pps_core: LinuxPPS API ver. 1 registered
+[    0.780000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.788000] clocksource: Switched to clocksource Constant
+[    0.796000] FS-Cache: Loaded
+[    0.904000] NET: Registered PF_INET protocol family
+[    0.908000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.912000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.920000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.920000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.924000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.924000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.928000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.952000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.016000] random: fast init done
+[    1.088000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.096000] SGI XFS with security attributes, quota, no debug enabled
+[    1.132000] xor: measuring software checksum speed
+[    1.276000]    8regs           :   136 MB/sec
+[    1.436000]    8regs_prefetch  :   123 MB/sec
+[    1.564000]    32regs          :   157 MB/sec
+[    1.708000]    32regs_prefetch :   134 MB/sec
+[    1.708000] xor: using function: 32regs (157 MB/sec)
+[    1.708000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.716000] io scheduler mq-deadline registered
+[    1.716000] io scheduler kyber registered
+[    1.716000] io scheduler bfq registered
+[    1.732000] IPMI message handler: version 39.2
+[    1.732000] ipmi device interface
+[    1.732000] ipmi_si: IPMI System Interface driver
+[    1.740000] ipmi_si: Unable to find any System Interface(s)
+[    1.828000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.908000] printk: console [ttyS0] disabled
+[    1.908000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.916000] printk: console [ttyS0] enabled
+[    1.916000] printk: console [ttyS0] enabled
+[    1.916000] printk: bootconsole [early0] disabled
+[    1.916000] printk: bootconsole [early0] disabled
+[    1.932000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    1.940000] nt35510: Initializing the nt35510
+[    2.276000] Console: switching to colour frame buffer device 60x50
+[    2.460000] fb0: NT35510 shadow framebuffer, 480x800 RGB565, 768000 bytes
+[    2.468000] nlcd nt35510: nt35510: character device and fb0 ready, 480x800, reg=(ptrval)
+[    2.476000] nt35510: registered correctly with major number 248
+[    2.640000] loop: module loaded
+[    2.648000] ls1a-nand driver initializing
+[    2.648000] ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init
+[    2.688000] libphy: Fixed MDIO Bus: probed
+[    2.688000] tun: Universal TUN/TAP device driver, 1.6
+[    2.704000] altera_ps2 1fe04000.ps2: base (ptrval), irq 23
+[    2.712000] mousedev: PS/2 mouse device common for all mice
+[    2.724000] IR MCE Keyboard/mouse protocol handler initialized
+[    2.732000] hid: raw HID events driver (C) Jiri Kosina
+[    2.764000] NET: Registered PF_INET6 protocol family
+[    2.788000] Segment Routing with IPv6
+[    2.796000] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.812000] sctp: Hash tables configured (bind 1024/1024)
+[    2.844000] Btrfs loaded, crc32c=crc32c-generic, zoned=yes
+[    3.744000] atkbd serio0: keyboard reset failed on 1fe04000.ps2
+[   17.256000] Key type encrypted registered
+[   17.256000] Warning: unable to open an initial console.
+[   17.996000] Freeing unused kernel image (initmem) memory: 18296K
+[   17.996000] This architecture does not have kernel memory protection.
+[   17.996000] Run /init as init process
+[   18.000000]   with arguments:
+[   18.000000]     /init
+[   18.000000]   with environment:
+[   18.000000]     HOME=/
+[   18.000000]     TERM=linux
+Saving 2048 bits of non-creditable seed for next boot
+Starting syslogd: OK
+Starting klogd: OK
+Running sysctl: OK
+Populating /dev using udev: [   19.588000] udevd[85]: starting version 3.2.14
+[   19.604000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.608000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.612000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.644000] udevd[85]: specified group 'input' unknown
+[   19.652000] udevd[85]: specified group 'sgx' unknown
+[   19.672000] udevd[85]: specified group 'kvm' unknown
+[   19.800000] udevd[86]: starting eudev-3.2.14
+[   20.024000] udevd[86]: specified group 'input' unknown
+[   20.032000] udevd[86]: specified group 'sgx' unknown
+[   20.064000] udevd[86]: specified group 'kvm' unknown
+done
+Configured eth0 as 10.90.50.44/24; server 10.90.50.43.
+nscscc-desktop: xinit started as PID 114
+
+NSCSCC LoongArch32 Reduced Linux
+
+Run nscscc-check for the standard demonstration checks.
+/bin/sh: can't access tty; job control turned off
+~ # set +m; rc=$?; echo __DONE_SETM__ rc=$rc
+__DONE_SETM__ rc=0
+~ # uname -a; rc=$?; echo __DONE_UNAME__ rc=$rc
+Linux nscscc-la32r 5.14.0-rc2-g7c5518b359cd #1 PREEMPT 1970-01-01 00:00:00 UTC loongarch32r GNU/Linux
+__DONE_UNAME__ rc=0
+~ # cat /proc/cpuinfo; rc=$?; echo __DONE_CPUINFO__ rc=$rc
+system type             : generic-loongson-machine
+
+processor               : 0
+package                 : 0
+core                    : 0
+CPU Family              : Loongson-32bit
+Model Name              :         -        
+PRID                    : 00004200
+CPU Revision            : 0x00
+FPU Revision            : 0x00
+CPU MHz                 : 0.00
+BogoMIPS                : 400.00
+TLB Entries             : 2112
+Address Sizes           : 32 bits physical, 32 bits virtual
+ISA                     : loongarch32r loongarch32s
+Features                : cpucfg csr tlb vint watch
+Hardware Watchpoint     : yes, iwatch count: 0, dwatch count: 0
+
+__DONE_CPUINFO__ rc=0
+~ # grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo; rc=$?; echo __DON
+E_MEM__ rc=$rc
+MemTotal:         115588 kB
+MemFree:           58272 kB
+MemAvailable:      56956 kB
+__DONE_MEM__ rc=0
+~ # dmesg | grep -E 'Memory: .*131072K'; rc=$?; echo __DONE_MEMORY_PHYSICAL__ rc
+=$rc
+[    0.000000] Memory: 97292K/131072K available (8794K kernel code, 1142K rwdata, 1648K rodata, 18296K init, 496K bss, 33780K reserved, 0K cma-reserved)
+__DONE_MEMORY_PHYSICAL__ rc=0
+~ # dmesg | grep -E 'NR_IRQS|Constant clock event|C[   29.152000] dev 1:Link OK 4
+[   29.152000]  dmfe: Change Speed to 100Mhz full duplex
+onstant clock source'; rc=$?;
+ echo __DONE_EXCEPTION_TIMER__ rc=$rc
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] Constant clock source device register
+__DONE_EXCEPTION_TIMER__ rc=0
+~ # dmesg | grep 'Run /init as init process'; rc=$?; echo __DONE_INITRAMFS__ rc=
+$rc
+[   17.996000] Run /init as init process
+__DONE_INITRAMFS__ rc=0
+~ # mount; rc=$?; echo __DONE_MOUNT__ rc=$rc
+rootfs on / type rootfs (rw,size=48644k,nr_inodes=12161)
+devtmpfs on /dev type devtmpfs (rw,relatime,size=48644k,nr_inodes=12161,mode=755)
+proc on /proc type proc (rw,relatime)
+sysfs on /sys type sysfs (rw,relatime)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+devpts on /dev/pts type devpts (rw,relatime,mode=600,ptmxmode=000)
+tmpfs on /run type tmpfs (rw,nosuid,nodev,relatime,mode=755)
+__DONE_MOUNT__ rc=0
+~ # cat /etc/nscscc/build-info; rc=$?; echo __DONE_BUILD_INFO__ rc=$rc
+KERNEL_SOURCE_COMMIT=7c5518b359cd3a15575dec340dbc00c0c1ed9f7e
+BUSYBOX_ORIGIN=base-rootfs
+BUSYBOX_SHA256=76eda92022537702df82c20491224ce29d6a598ffc8955a24a3cb89260a99221
+SOURCE_DATE_EPOCH=0
+__DONE_BUILD_INFO__ rc=0
+~ # cat /etc/nscscc/desktop-build-info; rc=$?; echo __DONE_DESKTOP_BUILD_INFO__ 
+rc=$rc
+BUILDROOT_COMMIT=3ebc7c69d56430c34eba4c869d1d4fe4d1e8de55
+PATCHED_BUILDROOT_TREE=ba583e6a067a16316aaaff1d6a084a56b548d359
+JIT_THU_PATCH_REPO_COMMIT=5b73cf2f9247502fc16835f14c6a4c3edc0e88e9
+DESKTOP_STACK=Xorg-fbdev-evdev-Fluxbox-XTerm
+__DONE_DESKTOP_BUILD_INFO__ rc=0
+~ # cat /sys/class/chiplab_confreg/chiplab_confreg/device_info; rc=$?; echo __DO
+NE_CONFREG_INFO__ rc=$rc
+Chiplab Confreg Device (Loongson)
+Physical base: 0x1fd0e000
+Character device: 249:0
+Platform device: 1fd0e000.confreg
+__DONE_CONFREG_INFO__ rc=0
+~ # cat /sys/class/chiplab_confreg/chiplab_confreg/all_inputs; rc=$?; echo __DON
+E_CONFREG_INPUTS__ rc=$rc
+switches=0xf6 buttons=0x0000 step=0x00 freq=33000000Hz
+__DONE_CONFREG_INPUTS__ rc=0
+~ # ip addr show; rc=$?; echo __DONE_IP_ADDR__ rc=$rc
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host 
+       valid_lft forever preferred_lft forever
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast qlen 1000
+    link/ether 00:98:76:64:32:19 brd ff:ff:ff:ff:ff:ff
+    inet 10.90.50.44/24 scope global eth0
+       valid_lft forever preferred_lft forever
+3: dummy0: <BROADCAST,NOARP> mtu 1500 qdisc noop qlen 1000
+    link/ether 92:5b:0c:ba:d1:f1 brd ff:ff:ff:ff:ff:ff
+4: sit0@NONE: <NOARP> mtu 1480 qdisc noop qlen 1000
+    link/sit 0.0.0.0 brd 0.0.0.0
+__DONE_IP_ADDR__ rc=0
+~ # cat /sys/class/net/eth0/statistics/rx_packets /sys/class/net/eth0/statistics
+/tx_packets /sys/class/net/eth0/statistics/rx_errors /sys/class/net/eth0/statist
+ics/tx_errors; rc=$?; echo __DONE_IP_LINK__ rc=$rc
+44
+8
+0
+0
+__DONE_IP_LINK__ rc=0
+~ # test "$(cat /sys/cla[   33.936000] urandom_read: 3 callbacks suppressed
+[   33.936000] random: fluxbox: uninitialized urandom read (4 bytes read)
+ss/net/e[   33.968000] random: fluxbox: uninitialized urandom read (4 bytes read)
+th0/c[   33.984000] random: crng init done
+arrier)" = 1 && echo CARRIER_OK; rc=$?; ech
+o __DONE_CARRIER__ rc=$rc
+CARRIER_OK
+__DONE_CARRIER__ rc=0
+~ # test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /s
+ys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO; rc=$?;
+ echo __DONE_NET_ERRORS_BEFORE__ rc=$rc
+NETWORK_ERRORS_ZERO
+__DONE_NET_ERRORS_BEFORE__ rc=0
+~ # ETH_IRQ_BEFORE=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test -n "
+$ETH_IRQ_BEFORE" && echo ETH_IRQ_BEFORE=$ETH_IRQ_BEFORE; rc=$?; echo __DONE_IRQ_
+BEFORE__ rc=$rc
+ETH_IRQ_BEFORE=59
+__DONE_IRQ_BEFORE__ rc=0
+~ # cat /proc/interrupts; rc=$?; echo __DONE_IRQ_BEFORE__ rc=$rc
+           CPU0       
+ 18:         61  LoongArch   2  eth0
+ 19:       7014  LoongArch   3  ttyS0
+ 23:          0  LoongArch   7  1fe04000.ps2
+ 27:       8872  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_BEFORE__ rc=0
+~ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_A__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=5.811 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 5.811/5.811/5.811 ms
+__DONE_PING_A__ rc=0
+~ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_B__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=2.073 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 2.073/2.073/2.073 ms
+__DONE_PING_B__ rc=0
+~ # ping -c 1 -W 2 10.90.50.43; rc=$?; echo __DONE_PING_C__ rc=$rc
+PING 10.90.50.43 (10.90.50.43): 56 data bytes
+64 bytes from 10.90.50.43: seq=0 ttl=128 time=5.753 ms
+
+--- 10.90.50.43 ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 5.753/5.753/5.753 ms
+__DONE_PING_C__ rc=0
+~ # ETH_IRQ_AFTER=$(awk '$NF == "eth0" {print $2}' /proc/interrupts); test "$ETH
+_IRQ_AFTER" -gt "$ETH_IRQ_BEFORE" && echo ETH_IRQ_DELTA_OK before=$ETH_IRQ_BEFOR
+E after=$ETH_IRQ_AFTER; rc=$?; echo __DONE_IRQ_DELTA__ rc=$rc
+ETH_IRQ_DELTA_OK before=59 after=96
+__DONE_IRQ_DELTA__ rc=0
+~ # cat /proc/interrupts; rc=$?; echo __DONE_IRQ_AFTER__ rc=$rc
+           CPU0       
+ 18:         97  LoongArch   2  eth0
+ 19:       8952  LoongArch   3  ttyS0
+ 23:          0  LoongArch   7  1fe04000.ps2
+ 27:       9510  LoongArch  11  timer
+ERR:          0
+__DONE_IRQ_AFTER__ rc=0
+~ # nscscc-board read; rc=$?; echo __DONE_BOARD_READ__ rc=$rc
+switches=0xf6
+buttons=0x0000
+step_buttons=0x00
+__DONE_BOARD_READ__ rc=0
+~ # nscscc-board led 0x0000a55a; rc=$?; echo __DONE_LED__ rc=$rc
+__DONE_LED__ rc=0
+~ # nscscc-board display 0x20260719; rc=$?; echo __DONE_DISPLAY__ rc=$rc
+__DONE_DISPLAY__ rc=0
+~ # cat /sys/class/chiplab_confreg/chiplab_confreg/led /sys/class/chiplab_confre
+g/chiplab_confreg/display; rc=$?; echo __DONE_CONFREG_OUTPUTS__ rc=$rc
+0xa55a
+0x20260719
+__DONE_CONFREG_OUTPUTS__ rc=0
+~ # dd if=/dev/chiplab_confreg bs=4 skip=1024 count=1 2>/dev/null | hexdump -v -
+e '1/4 "%08x\n"'; rc=$?; echo __DONE_CONFREG_CHAR_READ__ rc=$rc
+0000a55a
+__DONE_CONFREG_CHAR_READ__ rc=0
+~ # sh -c 'trap "echo SIGNAL_HANDLED" 14; kill -14 $$; echo SIGNAL_RETURNED'; rc
+=$?; echo __DONE_SIGNAL__ rc=$rc
+SIGNAL_HANDLED
+SIGNAL_RETURNED
+__DONE_SIGNAL__ rc=0
+~ # sh -c 'trap "echo TIMER_SIGNAL_HANDLED" 14; (sleep 1; kill -14 $$) & wait; e
+cho TIMER_SIGNAL_RETURNED'; rc=$?; echo __DONE_TIMER_SIGNAL__ rc=$rc
+TIMER_SIGNAL_HANDLED
+TIMER_SIGNAL_RETURNED
+__DONE_TIMER_SIGNAL__ rc=0
+~ # dmesg | grep -E 'altera_ps2|serio|atkbd'; rc=$?; echo __DONE_PS2_PROBE__ rc=
+$rc
+[    2.704000] altera_ps2 1fe04000.ps2: base (ptrval), irq 23
+[    3.744000] atkbd serio0: keyboard reset failed on 1fe04000.ps2
+__DONE_PS2_PROBE__ rc=0
+~ # PS2_IRQ_BEFORE=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts); s
+leep 2; PS2_IRQ_AFTER=$(awk '$NF == "1fe04000.ps2" {print $2}' /proc/interrupts)
+; test "$PS2_IRQ_BEFORE" = 0 && test "$PS2_IRQ_AFTER" = "$PS2_IRQ_BEFORE" && ech
+o PS2_IDLE_OK; rc=$?; echo __DONE_PS2_IDLE__ rc=$rc
+PS2_IDLE_OK
+__DONE_PS2_IDLE__ rc=0
+~ # ls -l /dev/nt35510; rc=$?; echo __DONE_NT35510_DEVICE__ rc=$rc
+c-w-------    1 root     root      248,   0 Jan  1 00:00 /dev/nt35510
+__DONE_NT35510_DEVICE__ rc=0
+~ # dd if=/dev/zero of=/dev/nt35510 bs=768000 count=1; rc=$?; echo __DONE_NT3551
+0_WRITE__ rc=$rc
+1+0 records in
+1+0 records out
+__DONE_NT35510_WRITE__ rc=0
+~ # dmesg | grep 'nt35510: registered correctly'; rc=$?; echo __DONE_NT35510_PRO
+BE__ rc=$rc
+[    2.476000] nt35510: registered correctly with major number 248
+__DONE_NT35510_PROBE__ rc=0
+~ # test -c /dev/fb0 && echo FB0_DEVICE_OK; rc=$?; echo __DONE_FB0_DEVICE__ rc=$
+rc
+FB0_DEVICE_OK
+__DONE_FB0_DEVICE__ rc=0
+~ # cat /proc/fb; rc=$?; echo __DONE_FB0_PROC__ rc=$rc
+0 nt35510
+__DONE_FB0_PROC__ rc=0
+~ # cat /sys/class/graphics/fb0/virtual_size /sys/class/graphics/fb0/bits_per_pi
+xel; rc=$?; echo __DONE_FB0_MODE__ rc=$rc
+480,800
+16
+__DONE_FB0_MODE__ rc=0
+~ # test "$(cat /sys/class/graphics/fb0/bits_per_pixel)" = 16 && echo FB0_RGB565
+_OK; rc=$?; echo __DONE_FB0_RGB565__ rc=$rc
+FB0_RGB565_OK
+__DONE_FB0_RGB565__ rc=0
+~ # test -s /run/nscscc-desktop.pid && kill -0 "$(cat /run/nscscc-desktop.pid)" 
+&& echo XINIT_RUNNING; rc=$?; echo __DONE_XINIT__ rc=$rc
+XINIT_RUNNING
+__DONE_XINIT__ rc=0
+~ # i=0; while [ "$i" -lt 120 ]; do pidof Xorg >/dev/null && pidof fluxbox >/dev
+/null && pidof xterm >/dev/null && break; i=$((i+1)); sleep 1; done; pidof Xorg 
+>/dev/null && pidof fluxbox >/dev/null && pidof xterm >/dev/null && echo DESKTOP
+_READY; rc=$?; echo __DONE_DESKTOP_READY__ rc=$rc
+DESKTOP_READY
+__DONE_DESKTOP_READY__ rc=0
+~ # MEM_AVAILABLE_KB=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo); test "$
+MEM_AVAILABLE_KB" -gt 8192 && echo DESKTOP_MEMORY_OK available_kb=$MEM_AVAILABLE
+_KB; rc=$?; echo __DONE_DESKTOP_MEMORY__ rc=$rc
+DESKTOP_MEMORY_OK available_kb=53100
+__DONE_DESKTOP_MEMORY__ rc=0
+~ # pidof Xorg >/dev/null && echo XORG_RUNNING; rc=$?; echo __DONE_XORG__ rc=$rc
+XORG_RUNNING
+__DONE_XORG__ rc=0
+~ # pidof fluxbox >/dev/null && echo FLUXBOX_RUNNING; rc=$?; echo __DONE_FLUXBOX
+__ rc=$rc
+FLUXBOX_RUNNING
+__DONE_FLUXBOX__ rc=0
+~ # pidof xterm >/dev/null && echo XTERM_RUNNING; rc=$?; echo __DONE_XTERM__ rc=
+$rc
+XTERM_RUNNING
+__DONE_XTERM__ rc=0
+~ # pidof udevd >/dev/null && echo UDEVD_RUNNING; rc=$?; echo __DONE_UDEVD__ rc=
+$rc
+UDEVD_RUNNING
+__DONE_UDEVD__ rc=0
+~ # tail -80 /var/log/nscscc-desktop.log; rc=$?; echo __DONE_DESKTOP_LOG__ rc=$r
+c
+
+
+X.Org X Server 1.21.1.11
+X Protocol Version 11, Revision 0
+Current Operating System: Linux nscscc-la32r 5.14.0-rc2-g7c5518b359cd #1 PREEMPT 1970-01-01 00:00:00 UTC loongarch32r
+Kernel command line: earlycon
+ 
+Current version of pixman: 0.42.2
+        Before reporting problems, check http://wiki.x.org
+        to make sure that you have the latest version.
+Markers: (--) probed, (**) from config file, (==) default setting,
+        (++) from command line, (!!) notice, (II) informational,
+        (WW) warning, (EE) error, (NI) not implemented, (??) unknown.
+(==) Log file: "/var/log/Xorg.0.log", Time: Thu Jan  1 00:00:26 1970
+(++) Using config file: "/etc/X11/xorg.conf"
+(==) Using system config directory "/usr/share/X11/xorg.conf.d"
+Failed to read: session.ignoreBorder
+Setting default value
+Failed to read: session.forcePseudoTransparency
+Setting default value
+Failed to read: session.colorsPerChannel
+Setting default value
+Failed to read: session.doubleClickInterval
+Setting default value
+Failed to read: session.tabPadding
+Setting default value
+Failed to read: session.styleOverlay
+Setting default value
+Failed to read: session.slitlistFile
+Setting default value
+Failed to read: session.appsFile
+Setting default value
+Failed to read: session.tabsAttachArea
+Setting default value
+Failed to read: session.menuSearch
+Setting default value
+Failed to read: session.cacheLife
+Setting default value
+Failed to read: session.cacheMax
+Setting default value
+Failed to read: session.autoRaiseDelay
+Setting default value
+Failed to read: session.ignoreBorder
+Setting default value
+Failed to read: session.forcePseudoTransparency
+Setting default value
+Failed to read: session.colorsPerChannel
+Setting default value
+Failed to read: session.doubleClickInterval
+Setting default value
+Failed to read: session.tabPadding
+Setting default value
+Failed to read: session.styleOverlay
+Setting default value
+Failed to read: session.slitlistFile
+Setting default value
+Failed to read: session.appsFile
+Setting default value
+Failed to read: session.tabsAttachArea
+Setting default value
+Failed to read: session.menuSearch
+Setting default value
+Failed to read: session.cacheLife
+Setting default value
+Failed to read: session.cacheMax
+Setting default value
+Failed to read: session.autoRaiseDelay
+Setting default value
+__DONE_DESKTOP_LOG__ rc=0
+~ # test "$(cat /sys/class/net/eth0/statistics/rx_errors)" = 0 && test "$(cat /s
+ys/class/net/eth0/statistics/tx_errors)" = 0 && echo NETWORK_ERRORS_ZERO; rc=$?;
+ echo __DONE_NET_ERRORS_AFTER__ rc=$rc
+NETWORK_ERRORS_ZERO
+__DONE_NET_ERRORS_AFTER__ rc=0
+~ # if dmesg | grep -E 'BUG:|Oops:|Kernel panic|Call Trace:'; then exit 1; else 
+echo KERNEL_ERRORS_NONE; fi; rc=$?; echo __DONE_KERNEL_ERRORS__ rc=$rc
+KERNEL_ERRORS_NONE
+__DONE_KERNEL_ERRORS__ rc=0
+~ # dmesg | tail -100; rc=$?; echo __DONE_DMESG__ rc=$rc
+[    0.052000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.056000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.060000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.288000] raid6: int32x8  gen()    24 MB/s
+[    0.356000] raid6: int32x8  xor()    16 MB/s
+[    0.424000] raid6: int32x4  gen()    28 MB/s
+[    0.492000] raid6: int32x4  xor()    18 MB/s
+[    0.560000] raid6: int32x2  gen()    17 MB/s
+[    0.628000] raid6: int32x2  xor()    12 MB/s
+[    0.696000] raid6: int32x1  gen()    10 MB/s
+[    0.764000] raid6: int32x1  xor()     7 MB/s
+[    0.764000] raid6: using algorithm int32x4 gen() 28 MB/s
+[    0.764000] raid6: .... xor() 18 MB/s, rmw enabled
+[    0.768000] raid6: using intx1 recovery algorithm
+[    0.772000] SCSI subsystem initialized
+[    0.776000] libata version 3.00 loaded.
+[    0.780000] pps_core: LinuxPPS API ver. 1 registered
+[    0.780000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.788000] clocksource: Switched to clocksource Constant
+[    0.796000] FS-Cache: Loaded
+[    0.904000] NET: Registered PF_INET protocol family
+[    0.908000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.912000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.916000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.920000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.920000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.924000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.924000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.928000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.952000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.016000] random: fast init done
+[    1.088000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.096000] SGI XFS with security attributes, quota, no debug enabled
+[    1.132000] xor: measuring software checksum speed
+[    1.276000]    8regs           :   136 MB/sec
+[    1.436000]    8regs_prefetch  :   123 MB/sec
+[    1.564000]    32regs          :   157 MB/sec
+[    1.708000]    32regs_prefetch :   134 MB/sec
+[    1.708000] xor: using function: 32regs (157 MB/sec)
+[    1.708000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.716000] io scheduler mq-deadline registered
+[    1.716000] io scheduler kyber registered
+[    1.716000] io scheduler bfq registered
+[    1.732000] IPMI message handler: version 39.2
+[    1.732000] ipmi device interface
+[    1.732000] ipmi_si: IPMI System Interface driver
+[    1.740000] ipmi_si: Unable to find any System Interface(s)
+[    1.828000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.908000] printk: console [ttyS0] disabled
+[    1.908000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.916000] printk: console [ttyS0] enabled
+[    1.916000] printk: bootconsole [early0] disabled
+[    1.932000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    1.940000] nt35510: Initializing the nt35510
+[    2.276000] Console: switching to colour frame buffer device 60x50
+[    2.460000] fb0: NT35510 shadow framebuffer, 480x800 RGB565, 768000 bytes
+[    2.468000] nlcd nt35510: nt35510: character device and fb0 ready, 480x800, reg=(ptrval)
+[    2.476000] nt35510: registered correctly with major number 248
+[    2.640000] loop: module loaded
+[    2.648000] ls1a-nand driver initializing
+[    2.648000] ITC MAC 10/100M Fast Ethernet Adapter driver 1.0 init
+[    2.688000] libphy: Fixed MDIO Bus: probed
+[    2.688000] tun: Universal TUN/TAP device driver, 1.6
+[    2.704000] altera_ps2 1fe04000.ps2: base (ptrval), irq 23
+[    2.712000] mousedev: PS/2 mouse device common for all mice
+[    2.724000] IR MCE Keyboard/mouse protocol handler initialized
+[    2.732000] hid: raw HID events driver (C) Jiri Kosina
+[    2.764000] NET: Registered PF_INET6 protocol family
+[    2.788000] Segment Routing with IPv6
+[    2.796000] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.812000] sctp: Hash tables configured (bind 1024/1024)
+[    2.844000] Btrfs loaded, crc32c=crc32c-generic, zoned=yes
+[    3.744000] atkbd serio0: keyboard reset failed on 1fe04000.ps2
+[   17.256000] Key type encrypted registered
+[   17.256000] Warning: unable to open an initial console.
+[   17.996000] Freeing unused kernel image (initmem) memory: 18296K
+[   17.996000] This architecture does not have kernel memory protection.
+[   17.996000] Run /init as init process
+[   18.000000]   with arguments:
+[   18.000000]     /init
+[   18.000000]   with environment:
+[   18.000000]     HOME=/
+[   18.000000]     TERM=linux
+[   19.588000] udevd[85]: starting version 3.2.14
+[   19.604000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.608000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.612000] random: udevd: uninitialized urandom read (16 bytes read)
+[   19.644000] udevd[85]: specified group 'input' unknown
+[   19.652000] udevd[85]: specified group 'sgx' unknown
+[   19.672000] udevd[85]: specified group 'kvm' unknown
+[   19.800000] udevd[86]: starting eudev-3.2.14
+[   20.024000] udevd[86]: specified group 'input' unknown
+[   20.032000] udevd[86]: specified group 'sgx' unknown
+[   20.064000] udevd[86]: specified group 'kvm' unknown
+[   29.152000] dev 1:Link OK 4
+[   29.152000]  dmfe: Change Speed to 100Mhz full duplex
+[   33.936000] urandom_read: 3 callbacks suppressed
+[   33.936000] random: fluxbox: uninitialized urandom read (4 bytes read)
+[   33.968000] random: fluxbox: uninitialized urandom read (4 bytes read)
+[   33.984000] random: crng init done
+__DONE_DMESG__ rc=0
+~ # sync; rc=$?; echo __DONE_SYNC__ rc=$rc
+__DONE_SYNC__ rc=0
