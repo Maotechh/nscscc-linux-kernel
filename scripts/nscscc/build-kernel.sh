@@ -112,6 +112,15 @@ make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	KAFLAGS="${KAFLAGS:+${KAFLAGS} }-Wa,--debug-prefix-map=${build_dir}=." \
 	-j"${build_jobs}" vmlinux
 
+if grep -qx 'CONFIG_USB_UE11_HCD=y' "${build_dir}/.config"; then
+	ue11_symbol=$("${cross_compile}nm" -n "${build_dir}/vmlinux" |
+		awk '$3 == "ue11h_driver" { found = 1 } END { print found + 0 }')
+	if [[ ${ue11_symbol} != 1 ]]; then
+		echo "CONFIG_USB_UE11_HCD=y but ue11h_driver is not linked into vmlinux" >&2
+		exit 1
+	fi
+fi
+
 debug_artifact=${artifact_dir}/${artifact_name}-debug
 tftp_artifact=${artifact_dir}/${artifact_name}
 cp "${build_dir}/vmlinux" "${debug_artifact}"
