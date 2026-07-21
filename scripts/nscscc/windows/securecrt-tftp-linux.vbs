@@ -238,7 +238,7 @@ Sub Main
     If ok Then ok = RunLinuxCommand(statusFile, "dmesg | grep -E 'altera_ps2|serio|atkbd'", "__DONE_PS2_PROBE__", 30, "1fe04000.ps2")
     If ok Then ok = RunLinuxCommand(statusFile, "PS2_IRQ_BEFORE=$(awk '$NF == ""1fe04000.ps2"" {print $2}' /proc/interrupts); sleep 2; PS2_IRQ_AFTER=$(awk '$NF == ""1fe04000.ps2"" {print $2}' /proc/interrupts); test ""$PS2_IRQ_BEFORE"" = 0 && test ""$PS2_IRQ_AFTER"" = ""$PS2_IRQ_BEFORE"" && echo PS2_IDLE_OK", "__DONE_PS2_IDLE__", 30, "PS2_IDLE_OK")
     If ok Then ok = RunLinuxCommand(statusFile, "ls -l /dev/nt35510", "__DONE_NT35510_DEVICE__", 30, "/dev/nt35510")
-    If ok Then ok = RunLinuxCommand(statusFile, "dd if=/dev/zero of=/dev/nt35510 bs=768000 count=1", "__DONE_NT35510_WRITE__", 60, "768000 bytes")
+    If ok Then ok = RunLinuxCommand(statusFile, "dd if=/dev/zero of=/dev/nt35510 bs=768000 count=1", "__DONE_NT35510_WRITE__", 60, "1+0 records out")
     If ok Then ok = RunLinuxCommand(statusFile, "dmesg | grep 'nt35510: registered correctly'", "__DONE_NT35510_PROBE__", 30, "nt35510: registered correctly")
     If ok Then ok = RunLinuxCommand(statusFile, "test -c /dev/fb0 && echo FB0_DEVICE_OK", "__DONE_FB0_DEVICE__", 30, "FB0_DEVICE_OK")
     If ok Then ok = RunLinuxCommand(statusFile, "cat /proc/fb", "__DONE_FB0_PROC__", 30, "nt35510")
