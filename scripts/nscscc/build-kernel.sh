@@ -54,7 +54,7 @@ for tool in gcc nm readelf strip; do
 		exit 1
 	fi
 done
-for command in cmp du python3 sha256sum stat; do
+for command in cmp du install python3 sha256sum stat; do
 	if ! command -v "${command}" >/dev/null 2>&1; then
 		echo "Required command not found: ${command}" >&2
 		exit 1
@@ -77,6 +77,8 @@ short_commit=${commit:0:9}
 artifact_name=${NSCSCC_ARTIFACT_NAME:-vmlinux-${short_commit}}
 initramfs=${artifact_dir}/initramfs-${short_commit}.cpio.gz
 initramfs_repeat=${artifact_dir}/initramfs-${short_commit}-repeat.cpio.gz
+initramfs_config_source=nscscc-initramfs-${short_commit}.cpio.gz
+kernel_initramfs=${build_dir}/${initramfs_config_source}
 
 "${source_dir}/scripts/nscscc/build-initramfs.sh" "${base_rootfs}" "${initramfs}"
 "${source_dir}/scripts/nscscc/build-initramfs.sh" "${base_rootfs}" "${initramfs_repeat}"
@@ -84,11 +86,12 @@ if ! cmp -s "${initramfs}" "${initramfs_repeat}"; then
 	echo "Repeated initramfs builds are not byte-for-byte identical" >&2
 	exit 1
 fi
+install -m 0644 "${initramfs}" "${kernel_initramfs}"
 
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	CROSS_COMPILE="${cross_compile}" "${defconfig}"
 "${source_dir}/scripts/config" --file "${build_dir}/.config" \
-	--set-str INITRAMFS_SOURCE "${initramfs}"
+	--set-str INITRAMFS_SOURCE "${initramfs_config_source}"
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	CROSS_COMPILE="${cross_compile}" olddefconfig
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
@@ -206,6 +209,7 @@ busybox_sha256=${busybox_sha256}
 desktop_build_info_sha256=${desktop_build_info_sha256}
 initramfs=${initramfs}
 initramfs_repeat=${initramfs_repeat}
+initramfs_config_source=${initramfs_config_source}
 initramfs_size=${initramfs_size}
 initramfs_sha256=${initramfs_sha256}
 initramfs_crc32=${initramfs_crc32}
