@@ -19,6 +19,11 @@ DMFE、confreg、NT35510 framebuffer 和 PS/2 控制器。
 - build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
   manifest，便于校验不同主机之间的文件身份。
 
+PS/2 的 Chiplab patch、controller 来源、寄存器 ABI 和自动仿真说明见
+[`Documentation/nscscc/chiplab-ps2-controller.md`](Documentation/nscscc/chiplab-ps2-controller.md)。
+所有实际复制或修改后复用的第三方代码见
+[`Documentation/nscscc/third-party-code.md`](Documentation/nscscc/third-party-code.md)。
+
 ## 最近 main 变更
 
 从 GitHub baseline `518625445067c9265b8ba38fbc9b43491fdea006` 到 desktop
@@ -103,7 +108,9 @@ artifact contract 见
 - framebuffer 和 NT35510 写入证明 Linux device path 与 framebuffer ABI，不能
   代替物理观察。当前 `panel_status=not_observed`，没有宣称 LCD 已显示图像。
 - 本次验证没有连接 PS/2 keyboard 或 mouse，因此没有宣称 key event、pointer
-  event 或实际输入操作已经通过。
+  event 或实际输入操作已经通过。新的双向 PS/2 controller 已通过 keyboard
+  reset、`0xfa` ACK、`0xaa` BAT、FIFO 和 interrupt 仿真，但尚未在实物键盘上
+  验证。
 - 单个 PS/2 controller 不能同时连接两个独立 PS/2 设备；同时使用 keyboard
   和 mouse 需要 Chiplab 增加第二个 controller 或 USB host controller。
 

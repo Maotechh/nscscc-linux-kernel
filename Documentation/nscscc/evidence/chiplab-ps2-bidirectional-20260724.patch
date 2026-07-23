@@ -1,0 +1,899 @@
+diff --git a/IP/APB_DEV/bytestream_ps2.v b/IP/APB_DEV/bytestream_ps2.v
+new file mode 100644
+index 0000000..d8fd3f2
+--- /dev/null
++++ b/IP/APB_DEV/bytestream_ps2.v
+@@ -0,0 +1,267 @@
++/* bytetream_ps2
++ *
++ * This component provides a PS/2 serial TX/RX interface into an 8-bit
++ * send/receive channel interface.  See bytestream_uart.v etc.
++ *
++ *
++ * Magic operation:
++ * This is generally RX but I do want to support TX.  A state machine goes into
++ * ST_TX when a TX byte is present (and returns to ST_IDLE after).
++ *
++ * In ST_IDLE:
++ * - If CLK goes low, start bit is being transmitted; go to ST_RX and
++ *   wait for D0-D7 (plus parity, plus stop).  Sample data when CLK is low.
++ * - If TX and CLK high, go into ST_TX; pull CLK low for >=100us, DAT low,
++ *   release CLK, change data when CLK goes low.  There are 11 falling edges,
++ *   1 start, 8 data, 1 parity, 1 stop, then a final rising edge where device
++ *   asserts ACK.
++ *
++ * Should implement timeouts on the CLK edges -- abort a TX/RX if there's no clock
++ * for say 10ms.  Expected clock is about 10KHz (i.e. much slower than system clock).
++ *
++ * 15/3/21 ME
++ *
++ * Copyright 2021-2022 Matt Evans
++ * SPDX-License-Identifier: Apache-2.0 WITH SHL-2.1
++ *
++ * Licensed under the Solderpad Hardware License v 2.1 (the “License”); you may
++ * not use this file except in compliance with the License, or, at your option,
++ * the Apache License version 2.0. You may obtain a copy of the License at
++ *
++ *  https://solderpad.org/licenses/SHL-2.1/
++ *
++ * Unless required by applicable law or agreed to in writing, any work
++ * distributed under the License is distributed on an “AS IS” BASIS, WITHOUT
++ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
++ * License for the specific language governing permissions and limitations
++ * under the License.
++ */
++
++
++module bytestream_ps2(input wire        clk,
++		      input wire        reset,
++
++		      /* PS2 interface: */
++                      input wire        ps2_clk_in,
++		      output wire       ps2_clk_pd, // 1=Pull-down
++                      input wire        ps2_dat_in,
++		      output wire       ps2_dat_pd, // 1=Pull-down
++
++		      /* Bytestream interface: */
++		      input wire [7:0]  bs_data_in,
++		      input wire        bs_data_in_valid,
++		      output wire       bs_data_in_consume,
++
++		      output wire [7:0] bs_data_out,
++		      output wire       bs_data_out_produce
++		      );
++
++   parameter CLK_RATE = 50*1000*1000;
++   parameter TIMEOUT  = (CLK_RATE/100);
++
++   localparam START_TX_DELAY = CLK_RATE/5000;	// 200us
++
++   reg                                  dat_pd;
++   reg                                  clk_pd;
++   reg [1:0]                            dati;
++   reg [1:0]                            clki;
++   reg [3:0]                            dsr;
++   reg [3:0]                            csr;
++   // Debounced inputs: are the last N samples the same? (biased high but hey)
++`ifdef TEST_NO_DEBOUNCE
++   wire                                 pdat = ps2_dat_in;
++   wire                                 pclk = ps2_clk_in;
++`else
++   wire                                 pdat = &dsr[3:0];
++   wire                                 pclk = &csr[3:0];
++`endif
++
++   reg [3:0]                            state;
++`define ST_IDLE 	0
++`define ST_RX 		1
++`define ST_RX_WH	2
++`define ST_TX		3
++`define ST_TX_WL	4
++`define ST_TX_WH	5
++
++   reg [3:0]                            count;
++   reg [9:0]                            ldata;
++   reg                                  produce;
++   reg                                  consume;
++   reg                                  last_pclk;
++   reg [19:0]                           timeout;
++
++   // Odd parity:  1 if there are an even number of 1s in the data.
++   wire                                 rparity = ~(^ldata[7:0]);
++   wire                                 tparity = ~(^bs_data_in[7:0]);
++
++   ////////////////////////////////////////////////////////////////////////////////
++   // Main FSM
++
++   always @(posedge clk) begin
++      /* Input synch/debouncing */
++      dati[1:0] <= {dati[0], ps2_dat_in};
++      clki[1:0] <= {clki[0], ps2_clk_in};
++
++      dsr[3:0]  <= {dsr[2:0], dati[1]};
++      csr[3:0]  <= {csr[2:0], clki[1]};
++
++      last_pclk <= pclk;
++
++
++      /* FSM */
++      case (state)
++
++        `ST_IDLE: begin
++           dat_pd        <= 0;
++           clk_pd        <= 0;
++           produce       <= 0;
++           consume       <= 0;
++
++           // A falling edge marks the start of a transmission from device:
++           if (last_pclk == 1 && pclk == 0) begin
++              if (pdat == 0) begin
++                 state      <= `ST_RX;
++                 count      <= 10;       	// 10 falling edges (8+par+stop)
++                 timeout    <= TIMEOUT;
++              end
++              // Else, what if start bit was 1?
++
++           end else if (bs_data_in_valid) begin
++              ldata   <= {1'b0, tparity, bs_data_in};
++              consume <= 1;		// For a cycle
++              state   <= `ST_TX;
++              count   <= 11;       	// 11 rising edges (st+8+par+stop)
++              // Initiate TX by holding CLK low for >100us:
++              timeout <= START_TX_DELAY;
++              clk_pd	 <= 1;
++           end
++        end
++
++
++        `ST_RX: begin
++           // Just wait for a rising edge:
++           if (last_pclk == 0 && pclk == 1) begin
++              // If we're done, send data.
++              if (count == 0) begin
++                 // Saw the final edge.  Now, ldata is {stop, parity, data}.
++                 if (ldata[9] != 1 || ldata[8] != rparity) begin
++                    // FIXME: complain
++                 end else begin
++                    // RX'd data!  Strobe for 1 clock:
++                    produce <= 1;
++                 end
++                 state   <= `ST_IDLE;
++
++              end else begin // if (count == 0)
++                 // Go wait for a falling edge & new bit:
++                 timeout <= TIMEOUT;
++                 state   <= `ST_RX_WH;
++              end
++
++           end else begin
++              if (timeout == 0)	// FIXME complain
++                state <= `ST_IDLE;
++              else
++                timeout <= timeout - 1;
++           end
++        end
++
++
++        `ST_RX_WH: begin
++           // Wait for a falling edge and sample new data:
++           if (last_pclk == 1 && pclk == 0) begin
++              ldata   <= {pdat, ldata[9:1]};
++              count   <= count-1;
++              timeout <= TIMEOUT;
++              state   <= `ST_RX;
++
++           end else begin
++              if (timeout == 0)	// FIXME complain
++                state <= `ST_IDLE;
++              else
++                timeout <= timeout - 1;
++           end
++        end
++
++
++        `ST_TX: begin
++           consume     <= 0;
++           // CLK is being held low.
++           if (timeout == 0) begin
++              // 100us done!  Bring DAT low, release CLK
++              dat_pd  <= 1;
++              clk_pd  <= 0;
++              timeout <= TIMEOUT;
++              state   <= `ST_TX_WL;
++
++           end else begin
++              timeout <= timeout - 1;
++           end
++        end // case: `ST_TX
++
++
++        `ST_TX_WL: begin
++           // Wait for device to bring CLK low, then we emit a data bit:
++           if (last_pclk == 1 && pclk == 0) begin
++              dat_pd  <= ~ldata[0];
++              ldata   <= {2'b11, ldata[8:1]};
++              count   <= count - 1;
++              timeout <= TIMEOUT;
++              state   <= `ST_TX_WH;
++
++           end else begin
++              if (timeout == 0)	// FIXME complain
++                state <= `ST_IDLE;
++              else
++                timeout <= timeout - 1;
++           end
++        end
++
++
++        `ST_TX_WH: begin
++           // Wait for device to bring CLK high
++           if (last_pclk == 0 && pclk == 1) begin
++
++              if (count == 0) begin
++                 // Sample ACK bit
++                 if (pdat == 1) begin
++                    // No ACK!  FIXME complain
++                 end
++                 state <= `ST_IDLE;
++
++              end else begin
++                 timeout <= TIMEOUT;
++                 state   <= `ST_TX_WL;
++              end
++
++           end else begin
++              if (timeout == 0)	// FIXME complain
++                state <= `ST_IDLE;
++              else
++                timeout <= timeout - 1;
++           end
++
++        end
++
++        default: begin
++        end
++      endcase
++
++      if (reset) begin
++         state   <= `ST_IDLE;
++         produce <= 0;
++      end
++   end
++
++   ////////////////////////////////////////////////////////////////////////////////
++
++   assign bs_data_out = ldata[7:0];
++   assign bs_data_out_produce = produce;
++   assign bs_data_in_consume = consume;
++
++   assign ps2_clk_pd = clk_pd;
++   assign ps2_dat_pd = dat_pd;
++
++
++endmodule // bytestream_ps2
+diff --git a/IP/APB_DEV/chiplab_ps2_rx.v b/IP/APB_DEV/chiplab_ps2_rx.v
+index 85a2d07..2c9006f 100644
+--- a/IP/APB_DEV/chiplab_ps2_rx.v
++++ b/IP/APB_DEV/chiplab_ps2_rx.v
+@@ -1,12 +1,15 @@
++`timescale 1ns/1ps
++
+ /*
+- * PS/2 host controller for the Chiplab experiment box.
++ * Altera PS/2 register adapter for the Chiplab experiment box.
+  *
+- * The two-register interface matches the Linux altera_ps2 driver. Reads from
+- * offset 0 return FIFO status and one received byte, writes to offset 0 send a
+- * host-to-device command, and bit 0 at offset 4 enables the receive interrupt.
+- * The transmit timing follows the PS/2 host protocol at a 100 MHz APB clock.
++ * Offset 0 implements the data register expected by Linux altera_ps2:
++ * bits 31:16 are RAVAIL, bit 15 is RVALID, and bits 7:0 hold the next byte.
++ * Offset 4 bit 0 controls the receive interrupt.
+  */
+-module chiplab_ps2_rx (
++module chiplab_ps2_rx #(
++    parameter integer CLK_RATE = 100000000
++) (
+     input  wire        clk,
+     input  wire        reset_n,
+ 
+@@ -27,108 +30,80 @@ module chiplab_ps2_rx (
+     output wire        irq
+ );
+ 
+-    localparam [3:0] TX_IDLE       = 4'd0;
+-    localparam [3:0] TX_INHIBIT    = 4'd1;
+-    localparam [3:0] TX_START_HOLD = 4'd2;
+-    localparam [3:0] TX_WAIT_CLOCK = 4'd3;
+-    localparam [3:0] TX_DATA       = 4'd4;
+-    localparam [3:0] TX_STOP       = 4'd5;
+-    localparam [3:0] TX_ACK        = 4'd6;
+-    localparam [3:0] TX_DONE       = 4'd7;
+-
+-    localparam [20:0] INHIBIT_LIMIT = 21'd10099;
+-    localparam [20:0] START_HOLD_LIMIT = 21'd499;
+-    localparam [20:0] WAIT_TIMEOUT_LIMIT = 21'd1499999;
+-    localparam [20:0] TRANSFER_TIMEOUT_LIMIT = 21'd199999;
+-
+-    reg ps2_clk_meta;
+-    reg ps2_clk_sync;
+-    reg ps2_clk_last;
+-    reg ps2_dat_meta;
+-    reg ps2_dat_sync;
+-
+     reg [7:0] fifo_mem [0:15];
+     reg [3:0] fifo_rd_ptr;
+     reg [3:0] fifo_wr_ptr;
+     reg [4:0] fifo_count;
+-    reg irq_enable;
+-    reg command_error;
+-
+-    reg command_active;
++    reg       irq_enable;
++    reg       command_pending;
++    reg       command_error;
+     reg [7:0] command_data;
+-    reg [3:0] tx_state;
+-    reg [20:0] tx_count;
+-    reg [7:0] tx_idle_count;
+-    reg [3:0] tx_bit;
+-    reg [8:0] tx_frame;
+-    reg tx_done;
+-    reg tx_failed;
+ 
+-    reg rx_active;
+-    reg [3:0] rx_bit;
+-    reg [7:0] rx_shift;
+-    reg rx_parity;
+-    reg rx_parity_bit;
+-    reg [7:0] rx_data;
+-    reg rx_valid;
++    wire       ps2_clk_pd;
++    wire       ps2_dat_pd;
++    wire [7:0] received_data;
++    wire       received_valid;
++    wire       command_consume;
+ 
+-    wire ps2_clk_fall = ps2_clk_last && !ps2_clk_sync;
+-    wire ps2_clk_rise = !ps2_clk_last && ps2_clk_sync;
+     wire apb_access = apb_psel && apb_penable;
+     wire data_read = apb_access && !apb_pwrite && !apb_addr[2];
+     wire data_write = apb_access && apb_pwrite && !apb_addr[2];
+     wire control_write = apb_access && apb_pwrite && apb_addr[2];
+     wire fifo_empty = (fifo_count == 0);
+     wire fifo_full = (fifo_count == 5'd16);
+-    wire fifo_push = rx_valid && !fifo_full;
++    wire fifo_push = received_valid && !fifo_full;
+     wire fifo_pop = data_read && !fifo_empty;
+-    wire command_complete = tx_done || tx_failed;
+ 
+-    assign apb_pready = apb_access &&
+-        (!data_write || (command_active && command_complete));
++    assign apb_pready = apb_access;
+     assign apb_prdata = apb_addr[2]
+         ? {21'b0, command_error, 1'b0, irq, 7'b0, irq_enable}
+         : {11'b0, fifo_count, !fifo_empty, 7'b0,
+            fifo_empty ? 8'b0 : fifo_mem[fifo_rd_ptr]};
+     assign irq = irq_enable && !fifo_empty;
+ 
+-    // PS/2 uses open-drain signaling. A low T drives zero; a high T releases.
++    /*
++     * Xilinx IOBUF T is active high for high impedance. The imported
++     * controller uses active-high pull-down requests.
++     */
+     assign ps2_clk_o = 1'b0;
+-    assign ps2_clk_t = (tx_state == TX_INHIBIT ||
+-                        tx_state == TX_START_HOLD) ? 1'b0 : 1'b1;
++    assign ps2_clk_t = !reset_n ? 1'b1 : ~ps2_clk_pd;
+     assign ps2_dat_o = 1'b0;
+-    assign ps2_dat_t =
+-        (tx_state == TX_START_HOLD || tx_state == TX_WAIT_CLOCK) ? 1'b0 :
+-        (tx_state == TX_DATA) ? tx_frame[tx_bit] : 1'b1;
++    assign ps2_dat_t = !reset_n ? 1'b1 : ~ps2_dat_pd;
++
++    bytestream_ps2 #(
++        .CLK_RATE(CLK_RATE)
++    ) ps2_protocol (
++        .clk(clk),
++        .reset(!reset_n),
++        .ps2_clk_in(ps2_clk_i),
++        .ps2_clk_pd(ps2_clk_pd),
++        .ps2_dat_in(ps2_dat_i),
++        .ps2_dat_pd(ps2_dat_pd),
++        .bs_data_in(command_data),
++        .bs_data_in_valid(command_pending),
++        .bs_data_in_consume(command_consume),
++        .bs_data_out(received_data),
++        .bs_data_out_produce(received_valid)
++    );
+ 
+     always @(posedge clk or negedge reset_n) begin
+         if (!reset_n) begin
+-            ps2_clk_meta <= 1'b1;
+-            ps2_clk_sync <= 1'b1;
+-            ps2_clk_last <= 1'b1;
+-            ps2_dat_meta <= 1'b1;
+-            ps2_dat_sync <= 1'b1;
+-        end else begin
+-            ps2_clk_meta <= ps2_clk_i;
+-            ps2_clk_sync <= ps2_clk_meta;
+-            ps2_clk_last <= ps2_clk_sync;
+-            ps2_dat_meta <= ps2_dat_i;
+-            ps2_dat_sync <= ps2_dat_meta;
+-        end
+-    end
+-
+-    always @(posedge clk or negedge reset_n) begin
+-        if (!reset_n) begin
+-            command_active <= 1'b0;
+-            command_data <= 8'b0;
+             irq_enable <= 1'b0;
++            command_pending <= 1'b0;
+             command_error <= 1'b0;
++            command_data <= 8'b0;
+         end else begin
+-            if (data_write && !command_active) begin
+-                command_active <= 1'b1;
+-                command_data <= apb_pwdata[7:0];
+-            end else if (command_active && command_complete) begin
+-                command_active <= 1'b0;
++            if (command_consume)
++                command_pending <= 1'b0;
++
++            if (data_write) begin
++                if (!command_pending || command_consume) begin
++                    command_pending <= 1'b1;
++                    command_data <= apb_pwdata[7:0];
++                    command_error <= 1'b0;
++                end else begin
++                    command_error <= 1'b1;
++                end
+             end
+ 
+             if (control_write) begin
+@@ -136,164 +111,6 @@ module chiplab_ps2_rx (
+                 if (apb_pwdata[10])
+                     command_error <= 1'b0;
+             end
+-            if (tx_failed)
+-                command_error <= 1'b1;
+-        end
+-    end
+-
+-    always @(posedge clk or negedge reset_n) begin
+-        if (!reset_n) begin
+-            tx_state <= TX_IDLE;
+-            tx_count <= 21'b0;
+-            tx_idle_count <= 8'b0;
+-            tx_bit <= 4'b0;
+-            tx_frame <= 9'b0;
+-            tx_done <= 1'b0;
+-            tx_failed <= 1'b0;
+-        end else begin
+-            tx_done <= 1'b0;
+-            tx_failed <= 1'b0;
+-
+-            case (tx_state)
+-                TX_IDLE: begin
+-                    tx_count <= 21'b0;
+-                    tx_bit <= 4'b0;
+-                    if (!command_active) begin
+-                        tx_idle_count <= 8'b0;
+-                    end else if (!rx_active && ps2_clk_sync && ps2_dat_sync) begin
+-                        if (tx_idle_count == 8'hff) begin
+-                            tx_frame <= {~^command_data, command_data};
+-                            tx_idle_count <= 8'b0;
+-                            tx_state <= TX_INHIBIT;
+-                        end else begin
+-                            tx_idle_count <= tx_idle_count + 1'b1;
+-                        end
+-                    end else begin
+-                        tx_idle_count <= 8'b0;
+-                    end
+-                end
+-
+-                TX_INHIBIT: begin
+-                    if (tx_count == INHIBIT_LIMIT) begin
+-                        tx_count <= 21'b0;
+-                        tx_state <= TX_START_HOLD;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_START_HOLD: begin
+-                    if (tx_count == START_HOLD_LIMIT) begin
+-                        tx_count <= 21'b0;
+-                        tx_state <= TX_WAIT_CLOCK;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_WAIT_CLOCK: begin
+-                    if (ps2_clk_fall) begin
+-                        tx_count <= 21'b0;
+-                        tx_bit <= 4'b0;
+-                        tx_state <= TX_DATA;
+-                    end else if (tx_count == WAIT_TIMEOUT_LIMIT) begin
+-                        tx_failed <= 1'b1;
+-                        tx_state <= TX_DONE;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_DATA: begin
+-                    if (ps2_clk_fall) begin
+-                        tx_count <= 21'b0;
+-                        if (tx_bit == 4'd8)
+-                            tx_state <= TX_STOP;
+-                        else
+-                            tx_bit <= tx_bit + 1'b1;
+-                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
+-                        tx_failed <= 1'b1;
+-                        tx_state <= TX_DONE;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_STOP: begin
+-                    if (ps2_clk_fall) begin
+-                        tx_count <= 21'b0;
+-                        tx_state <= TX_ACK;
+-                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
+-                        tx_failed <= 1'b1;
+-                        tx_state <= TX_DONE;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_ACK: begin
+-                    if (ps2_clk_rise) begin
+-                        if (!ps2_dat_sync)
+-                            tx_done <= 1'b1;
+-                        else
+-                            tx_failed <= 1'b1;
+-                        tx_state <= TX_DONE;
+-                    end else if (tx_count == TRANSFER_TIMEOUT_LIMIT) begin
+-                        tx_failed <= 1'b1;
+-                        tx_state <= TX_DONE;
+-                    end else begin
+-                        tx_count <= tx_count + 1'b1;
+-                    end
+-                end
+-
+-                TX_DONE: begin
+-                    tx_count <= 21'b0;
+-                    if (!command_active)
+-                        tx_state <= TX_IDLE;
+-                end
+-
+-                default: tx_state <= TX_IDLE;
+-            endcase
+-        end
+-    end
+-
+-    always @(posedge clk or negedge reset_n) begin
+-        if (!reset_n) begin
+-            rx_active <= 1'b0;
+-            rx_bit <= 4'b0;
+-            rx_shift <= 8'b0;
+-            rx_parity <= 1'b0;
+-            rx_parity_bit <= 1'b0;
+-            rx_data <= 8'b0;
+-            rx_valid <= 1'b0;
+-        end else begin
+-            rx_valid <= 1'b0;
+-            if (tx_state != TX_IDLE) begin
+-                rx_active <= 1'b0;
+-                rx_bit <= 4'b0;
+-            end else if (ps2_clk_fall) begin
+-                if (!rx_active) begin
+-                    if (!ps2_dat_sync) begin
+-                        rx_active <= 1'b1;
+-                        rx_bit <= 4'b0;
+-                        rx_parity <= 1'b0;
+-                    end
+-                end else if (rx_bit < 4'd8) begin
+-                    rx_shift[rx_bit[2:0]] <= ps2_dat_sync;
+-                    rx_parity <= rx_parity ^ ps2_dat_sync;
+-                    rx_bit <= rx_bit + 1'b1;
+-                end else if (rx_bit == 4'd8) begin
+-                    rx_parity_bit <= ps2_dat_sync;
+-                    rx_bit <= rx_bit + 1'b1;
+-                end else begin
+-                    rx_active <= 1'b0;
+-                    rx_bit <= 4'b0;
+-                    if (ps2_dat_sync && (rx_parity ^ rx_parity_bit)) begin
+-                        rx_data <= rx_shift;
+-                        rx_valid <= 1'b1;
+-                    end
+-                end
+-            end
+         end
+     end
+ 
+@@ -304,9 +121,10 @@ module chiplab_ps2_rx (
+             fifo_count <= 5'b0;
+         end else begin
+             if (fifo_push) begin
+-                fifo_mem[fifo_wr_ptr] <= rx_data;
++                fifo_mem[fifo_wr_ptr] <= received_data;
+                 fifo_wr_ptr <= fifo_wr_ptr + 1'b1;
+             end
++
+             if (fifo_pop)
+                 fifo_rd_ptr <= fifo_rd_ptr + 1'b1;
+ 
+diff --git a/IP/APB_DEV/sim/chiplab_ps2_rx_tb.v b/IP/APB_DEV/sim/chiplab_ps2_rx_tb.v
+new file mode 100644
+index 0000000..666f1b7
+--- /dev/null
++++ b/IP/APB_DEV/sim/chiplab_ps2_rx_tb.v
+@@ -0,0 +1,238 @@
++`timescale 1ns/1ns
++
++module chiplab_ps2_rx_tb;
++    reg clk = 1'b0;
++    reg reset_n = 1'b0;
++
++    reg [19:0] apb_addr = 20'b0;
++    reg apb_psel = 1'b0;
++    reg apb_penable = 1'b0;
++    reg apb_pwrite = 1'b0;
++    reg [31:0] apb_pwdata = 32'b0;
++    wire [31:0] apb_prdata;
++    wire apb_pready;
++
++    wire ps2_clk_o;
++    wire ps2_clk_t;
++    wire ps2_dat_o;
++    wire ps2_dat_t;
++    wire irq;
++
++    wire device_clk_pd;
++    wire device_dat_pd;
++    wire ps2_clk_line = ps2_clk_t && !device_clk_pd;
++    wire ps2_dat_line = ps2_dat_t && !device_dat_pd;
++
++    integer timeout;
++    reg [31:0] read_data;
++
++    always #5 clk = !clk;
++
++    chiplab_ps2_rx #(
++        .CLK_RATE(1000000)
++    ) dut (
++        .clk(clk),
++        .reset_n(reset_n),
++        .apb_addr(apb_addr),
++        .apb_psel(apb_psel),
++        .apb_penable(apb_penable),
++        .apb_pwrite(apb_pwrite),
++        .apb_pwdata(apb_pwdata),
++        .apb_prdata(apb_prdata),
++        .apb_pready(apb_pready),
++        .ps2_clk_i(ps2_clk_line),
++        .ps2_clk_o(ps2_clk_o),
++        .ps2_clk_t(ps2_clk_t),
++        .ps2_dat_i(ps2_dat_line),
++        .ps2_dat_o(ps2_dat_o),
++        .ps2_dat_t(ps2_dat_t),
++        .irq(irq)
++    );
++
++    ps2_echo_device device (
++        .ps2_clk_in(ps2_clk_line),
++        .ps2_clk_pd(device_clk_pd),
++        .ps2_dat_in(ps2_dat_line),
++        .ps2_dat_pd(device_dat_pd)
++    );
++
++    task apb_write;
++        input [19:0] address;
++        input [31:0] value;
++        begin
++            @(negedge clk);
++            apb_addr = address;
++            apb_pwdata = value;
++            apb_pwrite = 1'b1;
++            apb_psel = 1'b1;
++            apb_penable = 1'b0;
++            @(negedge clk);
++            apb_penable = 1'b1;
++            #1;
++            if (!apb_pready)
++                $fatal(1, "APB write did not complete");
++            @(negedge clk);
++            apb_psel = 1'b0;
++            apb_penable = 1'b0;
++            apb_pwrite = 1'b0;
++            apb_pwdata = 32'b0;
++        end
++    endtask
++
++    task apb_read;
++        input [19:0] address;
++        output [31:0] value;
++        begin
++            @(negedge clk);
++            apb_addr = address;
++            apb_pwrite = 1'b0;
++            apb_psel = 1'b1;
++            apb_penable = 1'b0;
++            @(negedge clk);
++            apb_penable = 1'b1;
++            #1;
++            if (!apb_pready)
++                $fatal(1, "APB read did not complete");
++            value = apb_prdata;
++            @(negedge clk);
++            apb_psel = 1'b0;
++            apb_penable = 1'b0;
++        end
++    endtask
++
++    initial begin
++        repeat (8) @(posedge clk);
++        reset_n = 1'b1;
++        repeat (8) @(posedge clk);
++
++        if (ps2_clk_o !== 1'b0 || ps2_dat_o !== 1'b0)
++            $fatal(1, "open-drain outputs must drive only zero");
++        if (ps2_clk_t !== 1'b1 || ps2_dat_t !== 1'b1)
++            $fatal(1, "PS/2 lines were not released after reset");
++
++        apb_write(20'h00004, 32'h00000001);
++        apb_write(20'h00000, 32'h000000ff);
++
++        timeout = 0;
++        while (irq !== 1'b1 && timeout < 100000) begin
++            @(posedge clk);
++            timeout = timeout + 1;
++        end
++        if (timeout == 100000)
++            $fatal(1, "timed out waiting for keyboard ACK");
++
++        apb_read(20'h00000, read_data);
++        if (read_data[31:16] !== 16'h0001)
++            $fatal(1, "RAVAIL was not one: %08x", read_data);
++        if (read_data[15] !== 1'b1)
++            $fatal(1, "RVALID was not set: %08x", read_data);
++        if (read_data[7:0] !== 8'hfa)
++            $fatal(1, "received byte was not ACK 0xfa: %08x", read_data);
++
++        repeat (4) @(posedge clk);
++        if (irq !== 1'b0)
++            $fatal(1, "IRQ remained asserted after ACK FIFO pop");
++
++        timeout = 0;
++        while (irq !== 1'b1 && timeout < 100000) begin
++            @(posedge clk);
++            timeout = timeout + 1;
++        end
++        if (timeout == 100000)
++            $fatal(1, "timed out waiting for keyboard BAT result");
++
++        apb_read(20'h00000, read_data);
++        if (read_data[31:16] !== 16'h0001)
++            $fatal(1, "BAT RAVAIL was not one: %08x", read_data);
++        if (read_data[15] !== 1'b1)
++            $fatal(1, "BAT RVALID was not set: %08x", read_data);
++        if (read_data[7:0] !== 8'haa)
++            $fatal(1, "received byte was not BAT 0xaa: %08x", read_data);
++
++        apb_read(20'h00000, read_data);
++        if (read_data[31:16] !== 16'h0000 ||
++            read_data[15] !== 1'b0)
++            $fatal(1, "FIFO was not empty after read: %08x", read_data);
++
++        $display("PASSED: keyboard reset, ACK/BAT RX, FIFO, and IRQ");
++        $finish;
++    end
++endmodule
++
++module ps2_echo_device (
++    input  wire ps2_clk_in,
++    output reg  ps2_clk_pd,
++    input  wire ps2_dat_in,
++    output reg  ps2_dat_pd
++);
++    localparam BITLEN = 500;
++
++    integer bit_number;
++    reg [15:0] data;
++
++    task send_byte;
++        input [7:0] value;
++        reg [9:0] frame;
++        begin
++            frame = {1'b1, ~^value, value};
++            ps2_dat_pd = 1'b1;
++            #15;
++            for (bit_number = 0; bit_number < 11;
++                 bit_number = bit_number + 1) begin
++                ps2_clk_pd = 1'b1;
++                #BITLEN;
++                ps2_clk_pd = 1'b0;
++                #16;
++                ps2_dat_pd = ~frame[0];
++                frame = {1'b1, frame[9:1]};
++                #BITLEN;
++                #15;
++            end
++        end
++    endtask
++
++    initial begin
++        ps2_clk_pd = 1'b0;
++        ps2_dat_pd = 1'b0;
++
++        forever begin
++            @(negedge ps2_clk_in);
++            @(posedge ps2_clk_in);
++
++            for (bit_number = 0; bit_number < 10;
++                 bit_number = bit_number + 1) begin
++                #BITLEN;
++                ps2_clk_pd = 1'b1;
++                #BITLEN;
++                ps2_clk_pd = 1'b0;
++                #1;
++                data = {ps2_dat_in, data[9:1]};
++            end
++
++            #BITLEN;
++            ps2_dat_pd = 1'b1;
++            #BITLEN;
++            ps2_clk_pd = 1'b1;
++            #BITLEN;
++            ps2_clk_pd = 1'b0;
++            ps2_dat_pd = 1'b0;
++
++            #(BITLEN * 123);
++
++            if (data[7:0] !== 8'hff)
++                $fatal(1, "host command was not keyboard reset: %02x",
++                       data[7:0]);
++
++            if (ps2_clk_in)
++                send_byte(8'hfa);
++            else
++                $fatal(1, "host did not release PS/2 clock after command");
++
++            #(BITLEN * 23);
++            if (ps2_clk_in)
++                send_byte(8'haa);
++            else
++                $fatal(1, "host inhibited PS/2 clock before BAT result");
++        end
++    end
++endmodule
+diff --git a/fpga/loongson/2023.2/system_run.xpr b/fpga/loongson/2023.2/system_run.xpr
+index 40d267b..febe9db 100644
+--- a/fpga/loongson/2023.2/system_run.xpr
++++ b/fpga/loongson/2023.2/system_run.xpr
+@@ -170,6 +170,20 @@
+           <Attr Name="UsedIn" Val="simulation"/>
+         </FileInfo>
+       </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/bytestream_ps2.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
++      <File Path="$PPRDIR/../../../IP/APB_DEV/chiplab_ps2_rx.v">
++        <FileInfo>
++          <Attr Name="UsedIn" Val="synthesis"/>
++          <Attr Name="UsedIn" Val="implementation"/>
++          <Attr Name="UsedIn" Val="simulation"/>
++        </FileInfo>
++      </File>
+       <File Path="$PPRDIR/../../../IP/AMBA/axi2apb.v">
+         <FileInfo>
+           <Attr Name="ImportPath" Val="$PPRDIR/../../../IP/AMBA/axi2apb.v"/>
