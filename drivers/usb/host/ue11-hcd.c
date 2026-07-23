@@ -46,6 +46,14 @@
 
 #define USB_LOG(l,a)    do { if (l <= USBLOG_LEVEL) printk a; } while (0)
 
+#define UE11_LINESTATE_SE0        0
+#define UE11_LINESTATE_FS_J       1
+#define UE11_LINESTATE_FS_K       2
+#define UE11_LINESTATE_SE1        3
+#define UE11_LINESTATE_UNSTABLE   0xff
+#define UE11_LINESTATE_SAMPLES    3
+#define UE11_LINESTATE_DELAY_US   5
+
 //-----------------------------------------------------------------
 // Defines:
 //-----------------------------------------------------------------
@@ -414,6 +422,28 @@ static void usbhw_phy_reset(struct ue11 *ue11)
     writel(0, ue11->reg_base + USB_CTRL2);
     usleep_range(1000, 2000);
 }
+
+static u8 ue11_read_stable_linestate(struct ue11 *ue11)
+{
+	u8 linestate;
+	u8 sample;
+	int i;
+
+	linestate = (readl(ue11->reg_base + USB_STATUS) >>
+		     USB_STATUS_LINESTATE_BITS_SHIFT) &
+		    USB_STATUS_LINESTATE_BITS_MASK;
+
+	for (i = 1; i < UE11_LINESTATE_SAMPLES; i++) {
+		udelay(UE11_LINESTATE_DELAY_US);
+		sample = (readl(ue11->reg_base + USB_STATUS) >>
+			  USB_STATUS_LINESTATE_BITS_SHIFT) &
+			 USB_STATUS_LINESTATE_BITS_MASK;
+		if (sample != linestate)
+			return UE11_LINESTATE_UNSTABLE;
+	}
+
+	return linestate;
+}
 //-----------------------------------------------------------------
 // port_power: Control USB port power enable
 //-----------------------------------------------------------------
@@ -436,10 +466,15 @@ static void port_power(struct ue11 *ue11, int is_on)
 
     mdelay(20);
 
-    if (is_on)
-        usbhw_hub_enable(ue11, 1, 1);
-    else
+	if (is_on) {
+	/*
+	 * Keep SOF disabled until an attached Full-Speed device has
+	 * completed reset. This also leaves LineState usable for polling.
+	 */
+	usbhw_hub_enable(ue11, 1, 0);
+	} else {
         usbhw_hub_reset(ue11);
+	}
 
     writel(ue11->irq_enable, ue11->reg_base + USB_IRQ_MASK);
 }
@@ -813,6 +848,80 @@ static void finish_request(
     if (ue11->periodic_count == 0)
         disable_sof_interrupt(ue11);
 }
+
+static void ue11_shutdown_active_transfer(struct ue11 *ue11)
+{
+	struct ue11h_ep *ep = ue11->active_transfer;
+	struct urb *urb;
+
+	if (!ep)
+		return;
+
+	ue11->active_transfer = NULL;
+	if (list_empty(&ep->hep->urb_list))
+		return;
+
+	urb = container_of(ep->hep->urb_list.next, struct urb, urb_list);
+	finish_request(ue11, ep, urb, -ESHUTDOWN);
+}
+
+/*
+ * USB_IRQ_STS.DEVICE_DETECT is not readable in the V0.5 RTL, so attachment
+ * is polled through the raw UTMI LineState. In Full-Speed transceiver mode,
+ * FS-J denotes a Full-Speed pull-up and FS-K denotes a Low-Speed pull-up.
+ */
+static void ue11_update_connection_locked(struct ue11 *ue11)
+{
+	struct device *dev = ue11_to_hcd(ue11)->self.controller;
+	u32 clear;
+	u8 linestate;
+
+	if (!(ue11->port1 & USB_PORT_STAT_POWER) ||
+	    (ue11->port1 & USB_PORT_STAT_RESET))
+		return;
+
+	linestate = ue11_read_stable_linestate(ue11);
+	if (linestate == UE11_LINESTATE_UNSTABLE ||
+	    linestate == UE11_LINESTATE_SE1)
+		return;
+
+	if (ue11->port1 & USB_PORT_STAT_CONNECTION) {
+		if (linestate != UE11_LINESTATE_SE0)
+			return;
+
+		ue11->irq_enable = 0;
+		writel(0, ue11->reg_base + USB_IRQ_MASK);
+		writel((1 << USB_IRQ_ACK_ERR_SHIFT) |
+		       (1 << USB_IRQ_ACK_DONE_SHIFT) |
+		       (1 << USB_IRQ_ACK_SOF_SHIFT),
+		       ue11->reg_base + USB_IRQ_ACK);
+		usbhw_hub_enable(ue11, 1, 0);
+
+		if (ue11->port1 & USB_PORT_STAT_ENABLE)
+			ue11->port1 |= USB_PORT_STAT_C_ENABLE << 16;
+		clear = USB_PORT_STAT_CONNECTION | USB_PORT_STAT_ENABLE |
+			USB_PORT_STAT_LOW_SPEED | USB_PORT_STAT_SUSPEND |
+			USB_PORT_STAT_RESET;
+		ue11->port1 &= ~clear;
+		ue11->port1 |= USB_PORT_STAT_C_CONNECTION << 16;
+		ue11_shutdown_active_transfer(ue11);
+		dev_info(dev, "USB device disconnected\n");
+		return;
+	}
+
+	if (linestate == UE11_LINESTATE_FS_J) {
+		ue11->port1 |= USB_PORT_STAT_CONNECTION;
+		ue11->port1 &= ~USB_PORT_STAT_LOW_SPEED;
+		ue11->port1 |= USB_PORT_STAT_C_CONNECTION << 16;
+		dev_info(dev, "Full-Speed device detected\n");
+	} else if (linestate == UE11_LINESTATE_FS_K) {
+		ue11->port1 |= USB_PORT_STAT_CONNECTION |
+			       USB_PORT_STAT_LOW_SPEED;
+		ue11->port1 |= USB_PORT_STAT_C_CONNECTION << 16;
+		dev_warn(dev,
+			 "Low-Speed device detected but unsupported by the SIE\n");
+	}
+}
 //-----------------------------------------------------------------
 // process_transfer_result: Called on transfer complete / error
 //-----------------------------------------------------------------
@@ -908,9 +1017,10 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
             len = ((status >> USB_RX_STAT_COUNT_BITS_SHIFT) & USB_RX_STAT_COUNT_BITS_MASK);
             USB_LOG(USBLOG_DATA, ("USB: Received length %d, requested %d\n", urb->actual_length + len, ep->length));
 
-            copy_len = min_t(int, len,
-                             urb->transfer_buffer_length -
-                             urb->actual_length);
+	    copy_len = min_t(int, len, ep->length);
+	    copy_len = min_t(int, copy_len,
+			     urb->transfer_buffer_length -
+			     urb->actual_length);
             if (copy_len != len)
                 urbstat = -EOVERFLOW;
 
@@ -1096,7 +1206,7 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
     struct ue11h_ep    *ep     = NULL;
     unsigned long       flags;
     int                 i;
-    int                 retval;
+	int                 retval = 0;
     struct usb_host_endpoint    *hep = urb->ep;
 
     USB_LOG(USBLOG_INFO, ("USB: URB queue %p\n", urb));
@@ -1105,14 +1215,14 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
     if (type == PIPE_ISOCHRONOUS)
     {
         USB_LOG(USBLOG_ERR, ("USB: Isochronous transfers not supported\n"));
-        return -ENOSPC;
+	return -EOPNOTSUPP;
     }
 
     // NOTE: Low speed devices are not supported!
     if (udev->speed == USB_SPEED_LOW)
     {
         USB_LOG(USBLOG_ERR, ("USB: Low speed devices not supported\n"));
-        return -ENOSPC;
+	return -EOPNOTSUPP;
     }    
 
     /* avoid all allocations within spinlocks */
@@ -1347,13 +1457,18 @@ static int ue11h_get_frame(struct usb_hcd *hcd)
 static int ue11h_hub_status_data(struct usb_hcd *hcd, char *buf)
 {
     struct ue11 *ue11 = hcd_to_ue11(hcd);
+	unsigned long flags;
+	bool changed;
 
-    // No status changes
-    if (!(ue11->port1 & (0xffff << 16)))        
-        return 0;
+	spin_lock_irqsave(&ue11->lock, flags);
+	ue11_update_connection_locked(ue11);
+	changed = ue11->port1 & (0xffff << 16);
+	spin_unlock_irqrestore(&ue11->lock, flags);
+
+	if (!changed)
+		return 0;
 
     /* tell hub_wq port 1 changed */
-    pr_info("ue11h_hub_status_data: Port 1 changed state\n");
     *buf = (1 << 1);
     return 1;
 }
@@ -1392,25 +1507,38 @@ static void ue11h_timer(struct timer_list *t)
 {
     unsigned long    flags;
     struct ue11    *ue11 = from_timer(ue11, t, timer);
+	struct usb_hcd *hcd = ue11_to_hcd(ue11);
 
     spin_lock_irqsave(&ue11->lock, flags);
 
     // De-assert USB reset
-    usbhw_hub_enable(ue11, 1, 1);
+	usbhw_hub_enable(ue11, 1,
+			 !(ue11->port1 & USB_PORT_STAT_LOW_SPEED));
 
     // Small delay to allow data lines to settle
     udelay(3);
 
-    // Force device detection
-    ue11->port1 |= (USB_PORT_STAT_POWER | USB_PORT_STAT_ENABLE);
     ue11->port1 &= ~USB_PORT_STAT_RESET;
+	ue11_update_connection_locked(ue11);
+	if ((ue11->port1 & USB_PORT_STAT_CONNECTION) &&
+	    !(ue11->port1 & USB_PORT_STAT_LOW_SPEED))
+		ue11->port1 |= USB_PORT_STAT_ENABLE;
+	else
+		ue11->port1 &= ~USB_PORT_STAT_ENABLE;
+	ue11->port1 |= USB_PORT_STAT_C_RESET << 16;
 
     // Enable USB interrupts
-    ue11->irq_enable |= ((1 << USB_IRQ_MASK_ERR_SHIFT) | (1 << USB_IRQ_MASK_DONE_SHIFT));
+	if (ue11->port1 & USB_PORT_STAT_ENABLE)
+		ue11->irq_enable |= ((1 << USB_IRQ_MASK_ERR_SHIFT) |
+				     (1 << USB_IRQ_MASK_DONE_SHIFT));
+	else
+		ue11->irq_enable = 0;
 
     /* reenable irqs */
     writel(ue11->irq_enable, ue11->reg_base + USB_IRQ_MASK);
     spin_unlock_irqrestore(&ue11->lock, flags);
+
+	usb_hcd_poll_rh_status(hcd);
 }
 //-----------------------------------------------------------------
 // ue11h_hub_control
@@ -1452,8 +1580,9 @@ ue11h_hub_control(
         switch (wValue) {
         case USB_PORT_FEAT_ENABLE:
             pr_info("ue11h_hub_control: USB_PORT_FEAT_ENABLE (DISABLE)\n");
-            ue11->port1 &= USB_PORT_STAT_POWER;
+	    ue11->port1 &= ~USB_PORT_STAT_ENABLE;
             ue11->irq_enable = 0;
+	    usbhw_hub_enable(ue11, 1, 0);
             writel(ue11->irq_enable, ue11->reg_base + USB_IRQ_MASK);
             break;
         case USB_PORT_FEAT_SUSPEND:
@@ -1489,6 +1618,7 @@ ue11h_hub_control(
         USB_LOG(USBLOG_INFO,("USB: Get port status 0x%x (Port=%x)\n", wValue, ue11->port1));
         if (wIndex != 1)
             goto error;
+	ue11_update_connection_locked(ue11);
         put_unaligned_le32(ue11->port1, buf);
         break;
     case SetPortFeature:
@@ -1504,14 +1634,16 @@ ue11h_hub_control(
             break;
         case USB_PORT_FEAT_POWER:
             pr_info("ue11h_hub_control: USB_PORT_FEAT_POWER (power on)\n");
-            ue11->port1 |= USB_PORT_STAT_CONNECTION;
-            ue11->port1 |= USB_PORT_STAT_C_CONNECTION << 16;
+	    port_power(ue11, 1);
             break;
         case USB_PORT_FEAT_RESET:
             if (ue11->port1 & USB_PORT_STAT_SUSPEND)
                 goto error;
             if (!(ue11->port1 & USB_PORT_STAT_POWER))
                 break;
+	    ue11_update_connection_locked(ue11);
+	    if (!(ue11->port1 & USB_PORT_STAT_CONNECTION))
+		break;
 
             pr_info("ue11h_hub_control: USB_PORT_FEAT_RESET\n");
 

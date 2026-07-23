@@ -27,6 +27,10 @@ void mach_irq_dispatch(unsigned int pending)
 		do_IRQ(LOONGSON_GMAC_IRQ) ; //in fact , it's for ehternet
 	if (pending & 0x8)
 		do_IRQ(LOONGSON_UART_IRQ);
+	if (pending & ECFGF_IP5)
+		do_IRQ(LOONGSON_CPU_IRQ_BASE + ECFGB_IP5);
+	if (pending & ECFGF_IP6)
+		do_IRQ(LOONGSON_CPU_IRQ_BASE + ECFGB_IP6);
 #else
 	else if (pending & 0x4)
 		do_IRQ(LOONGSON_CPU_IRQ_BASE + 2); 	/* IP2 */
