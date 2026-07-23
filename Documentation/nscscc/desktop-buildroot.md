@@ -115,7 +115,8 @@ ps | grep -E 'Xorg|fluxbox|xterm|udevd'
 
 ## Hardware limits
 
-The USB system-integration bitstream instantiates one Full-Speed host at
+The image includes `usbutils` for `lsusb` and `evtest` for decoded input
+events. The USB system-integration bitstream instantiates one Full-Speed host at
 `0x1fe0c000`, in addition to the Altera PS/2 controller at `0x1fe04000`.
 The PS/2 controller can operate one PS/2 keyboard or mouse. A Full-Speed USB
 receiver provides the independent mouse path. The UE11 controller does not

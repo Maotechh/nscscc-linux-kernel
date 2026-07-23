@@ -1221,7 +1221,8 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
     // NOTE: Low speed devices are not supported!
     if (udev->speed == USB_SPEED_LOW)
     {
-        USB_LOG(USBLOG_ERR, ("USB: Low speed devices not supported\n"));
+	dev_err_ratelimited(hcd->self.controller,
+			    "Low-Speed transfer rejected: controller SIE is Full-Speed only\n");
 	return -EOPNOTSUPP;
     }    
 

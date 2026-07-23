@@ -25,25 +25,33 @@ timing, DRC result, and bitstream identity are recorded in
 | --- | --- |
 | USB controller physical address | `0x1fe0c000` |
 | Register window | `0x1000` bytes |
-| SoC interrupt input | `6` |
-| Linux interrupt | `8` |
+| CPU `intrpt` input | `6` |
+| Device-tree hardware interrupt | `8` |
+| Linux IRQ | `24` |
 | APB clock | 100 MHz |
 | UTMI clock | 60 MHz |
 | Transfer types | control, bulk, interrupt |
 
-The hardware explicitly rejects Low-Speed and isochronous transfers. A mouse
-receiver must enumerate as Full-Speed. The HCD performs a PHY reset during
-probe, enables the root hub and SOF generation, retries a finite number of
-transfer errors, and reports RX overflow instead of indexing beyond the PIO
-buffer.
+The hardware explicitly rejects Low-Speed and isochronous transfers with
+`-EOPNOTSUPP`. A mouse receiver must enumerate as Full-Speed. The HCD performs
+a PHY reset during probe and polls the raw UTMI LineState because the V0.5
+RTL does not drive the readable `USB_IRQ_STS.DEVICE_DETECT` bit. It keeps SOF
+disabled until a real Full-Speed attachment completes reset, limits every RX
+copy to both the current packet and the URB buffer, drains excess RX bytes,
+and completes an active URB with `-ESHUTDOWN` on disconnect.
+
+The current pure SpinalHDL CPU writes `intrpt[7:0]` to `ESTAT[9:2]` but always
+enters at `EENTRY`; it does not apply the `ECFG.VS` hardware-vector offset.
+The LoongArch32 fallback dispatcher therefore handles ECFG IP5 and IP6,
+which are the PS/2 hardware interrupt 7 and USB hardware interrupt 8.
 
 ## Linux and desktop path
 
 `CONFIG_USB_UE11_HCD=y` registers the controller from
 `arch/loongarch/boot/dts/loongson/loongson32_ls.dts`. The kernel configuration
 also enables `CONFIG_USB_HID`, `CONFIG_HID_GENERIC`, `CONFIG_HIDRAW`, and
-`CONFIG_INPUT_EVDEV`. Buildroot enables `evtest`, in addition to the existing
-X.Org `evdev` driver and eudev device discovery.
+`CONFIG_INPUT_EVDEV`. Buildroot enables `usbutils` and `evtest`, in addition
+to the existing X.Org `evdev` driver and eudev device discovery.
 
 After enumeration, the expected device path is:
 
@@ -85,6 +93,25 @@ The USB controller interrupt counter must increase during enumeration and
 interrupt polling. A successful Linux boot without a USB descriptor, HID
 input node, or event record is not a successful mouse validation.
 
+Connection detection also needs a negative test. Boot once with no USB
+device attached, wait at least two root-hub polling periods, and require that
+no downstream device appears:
+
+```sh
+sleep 1
+test ! -e /sys/bus/usb/devices/1-1
+dmesg | grep -E 'Full-Speed device detected|Low-Speed device detected'
+```
+
+The final command must produce no attachment message in the no-device run.
+For an attached receiver, require `12` from the corresponding sysfs `speed`
+file. A value of `1.5` identifies a Low-Speed device, which this SIE detects
+but cannot use.
+
+The same checks are packaged in
+`scripts/nscscc/validate-ue11-root-hub.sh`. Run only the mode matching the
+physical attachment for that boot.
+
 ## Rebuild procedure
 
 1. Build the Chiplab system integration with Vivado 2023.2, CPU 40 MHz and
@@ -103,9 +130,11 @@ in this repository. No CPU implementation or Linux UAPI changes are required.
 
 ## Current limitations
 
-The controller is a single-port Full-Speed host. It does not support
-Low-Speed devices, isochronous endpoints, or simultaneous independent USB
-ports. A receiver that does not enumerate must first be checked with
-another known Full-Speed HID device, then classified using the PHY, UTMI,
-controller interrupt, and descriptor logs. X.Org input discovery proves the
-software device path but does not prove physical LCD output.
+The controller is a single-port Full-Speed host. The PHY can identify a
+Low-Speed pull-up, but the SIE cannot perform Low-Speed transactions. It also
+does not support isochronous endpoints or simultaneous independent USB ports.
+The current source has passed an x86-64 GCC 8.3 LoongArch32 Reduced cross
+build and link check. USB enumeration, HID events, and disconnect handling
+have not been revalidated on hardware for this revision. X.Org input
+discovery proves the software device path but does not prove physical LCD
+output.

@@ -72,3 +72,13 @@ party projects:
 The APB PS/2 register adapter, FIFO, protocol testbench, address integration,
 interrupt connection, and Vivado source-list changes were written for this
 project.
+
+## USB host
+
+- `drivers/usb/host/ue11-hcd.c` started from the Linux HCD shipped in
+  `ultraembedded/core_usb_host` commit
+  `81eb9f131dbb434a9047ae074fea5c31ef46ce5d`. This repository adapts it to
+  the JIT-THU V0.5 register block and adds deterministic root-hub connection,
+  disconnect, overflow, error-return, and Full-Speed-only behavior.
+- The Chiplab USB RTL recorded in the USB evidence patch uses the same
+  UltraEmbedded commit plus the JIT-THU V0.5 register block.

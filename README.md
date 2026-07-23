@@ -17,7 +17,7 @@ DMFE、confreg、NT35510 framebuffer、PS/2 和 USB Full-Speed 控制器。
   GNOME，也不依赖 GPU 或 OpenGL，适合实验箱的 128 MiB DDR。
 - PS/2 serio、keyboard 和 mouse protocol 支持，以及 Linux evdev 接口。
 - UE11 USB Full-Speed host、USB HID、`hid-generic`、`hidraw`、evdev 和
-  Buildroot `evtest`，用于 USB 鼠标接收器和 X.Org 输入。
+  Buildroot `usbutils`／`evtest`，用于 USB 鼠标接收器和 X.Org 输入。
 - build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
   manifest，便于校验不同主机之间的文件身份。
 
@@ -122,6 +122,9 @@ artifact contract 见
   Full-Speed host 为鼠标接收器提供独立输入。
 - UE11 controller 不支持 Low-Speed 和 isochronous transfer。接收器必须
   以 Full-Speed 枚举。
+- 当前 USB revision 已通过 EPYC2 的 LoongArch32 Reduced 全量 kernel build、
+  `W=1` object build 和 `vmlinux` symbol 检查，但按当前要求没有连接实验箱，
+  因此没有宣称 USB descriptor、HID event 或 disconnect 实物验证已经通过。
 
 ## 依赖
 

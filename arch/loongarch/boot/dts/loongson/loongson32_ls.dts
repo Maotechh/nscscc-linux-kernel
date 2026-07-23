@@ -14,7 +14,7 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs = "earlycon";
+		bootargs = "earlycon atkbd.reset=0";
 	};
 
 	extioiic: interrupt-controller@0x1fe11600 {

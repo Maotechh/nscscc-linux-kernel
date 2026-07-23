@@ -168,6 +168,7 @@ busybox_source=${source_dir}/dl/busybox/busybox-${busybox_version}.tar.bz2
 for path in "${rootfs_cpio}" "${rootfs_tar}" \
 	"${busybox_build_dir}/.config" "${busybox_source}" \
 	"${target_dir}/bin/busybox" \
+	"${target_dir}/usr/bin/lsusb" \
 	"${target_dir}/usr/bin/Xorg" "${target_dir}/usr/bin/xinit" \
 	"${target_dir}/usr/bin/fluxbox" "${target_dir}/usr/bin/xterm" \
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so" \
@@ -211,6 +212,7 @@ fi
 runtime_paths=(
 	"${target_dir}/usr/bin/Xorg"
 	"${target_dir}/usr/bin/evtest"
+	"${target_dir}/usr/bin/lsusb"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
