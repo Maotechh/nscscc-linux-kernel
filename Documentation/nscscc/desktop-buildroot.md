@@ -62,6 +62,12 @@ script removes the unused Fortran/OpenMP libraries and eudev hardware database
 from the target image.  Fluxbox retains C++ support, while the image keeps
 only the DejaVu Sans and Sans Mono families used by the desktop.
 
+The GCC 8.3 linker does not follow `libusb-1.0.so` to the `libudev.so.1`
+installed in the sysroot `/lib` directory while linking `usbutils`.  The helper
+therefore names both `libusb-1.0` and `libudev` in the `usbutils` configure
+environment.  The manifest records this setting and verifies that `lsusb` is
+an ELF32 LoongArch executable.
+
 The GCC 8.3 runtime loader searches `/usr/lib32/sf`, which resolves to
 `/usr/lib` in this image, while Buildroot installs glibc runtime libraries in
 `/lib`.  The post-build script adds relative links in `/usr/lib` for every

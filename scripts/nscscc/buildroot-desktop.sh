@@ -40,6 +40,8 @@ buildroot_commit=3ebc7c69d56430c34eba4c869d1d4fe4d1e8de55
 patch_repo_commit=5b73cf2f9247502fc16835f14c6a4c3edc0e88e9
 patched_buildroot_tree=ba583e6a067a16316aaaff1d6a084a56b548d359
 busybox_version=1.36.1
+usbutils_version=017
+usbutils_conf_env='LIBS="-lusb-1.0 -ludev"'
 
 patch_names=(
 	0001-loongarch-add-arch-support-for-LoongArch-32bit-Reduc.patch
@@ -136,6 +138,7 @@ BUILDROOT_COMMIT=${buildroot_commit}
 PATCHED_BUILDROOT_TREE=${patched_buildroot_tree}
 JIT_THU_PATCH_REPO_COMMIT=${patch_repo_commit}
 DESKTOP_STACK=Xorg-fbdev-evdev-Fluxbox-XTerm
+USBUTILS_LINK_LIBRARIES=libusb-1.0,libudev
 EOF
 	chmod 0755 \
 		"${overlay_dir}/etc/init.d/S41nscscc-network" \
@@ -154,7 +157,10 @@ EOF
 	"${source_dir}/utils/config" --file "${output_dir}/.config" \
 		--set-str BR2_ROOTFS_POST_FAKEROOT_SCRIPT "${post_build_script}"
 	make -C "${source_dir}" O="${output_dir}" olddefconfig
-	make -C "${source_dir}" O="${output_dir}" -j"${jobs}"
+	# The external LA32R linker does not follow libusb's libudev dependency
+	# from sysroot/lib unless usbutils names both shared libraries.
+	make -C "${source_dir}" O="${output_dir}" \
+		USBUTILS_CONF_ENV="${usbutils_conf_env}" -j"${jobs}"
 elif [[ ! -d ${output_dir}/target ]]; then
 	echo "Cannot reuse missing output directory: ${output_dir}" >&2
 	exit 1
@@ -280,11 +286,12 @@ overlay_sha256=$(tar --sort=name --mtime=@0 --owner=0 --group=0 \
 busybox_source_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
 busybox_config_sha256=$(sha256sum "${busybox_build_dir}/.config" | awk '{print $1}')
 busybox_size=$(stat -c '%s' "${target_dir}/bin/busybox")
-component_names=(busybox xorg evtest fluxbox xterm fbdev evdev fbdevhw shadow)
+component_names=(busybox xorg evtest lsusb fluxbox xterm fbdev evdev fbdevhw shadow)
 component_paths=(
 	"${target_dir}/bin/busybox"
 	"${target_dir}/usr/bin/Xorg"
 	"${target_dir}/usr/bin/evtest"
+	"${target_dir}/usr/bin/lsusb"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
@@ -333,6 +340,8 @@ busybox_size=${busybox_size}
 busybox_elf_class=${busybox_class}
 busybox_elf_machine=${busybox_machine}
 busybox_sha256=${busybox_sha256}
+usbutils_version=${usbutils_version}
+usbutils_link_libraries=libusb-1.0,libudev
 build_host_arch=$(uname -m)
 toolchain=${toolchain_dir}
 toolchain_version=${toolchain_version}
@@ -355,6 +364,9 @@ xorg_sha256=${xorg_sha256}
 evtest_elf_class=${evtest_class}
 evtest_elf_machine=${evtest_machine}
 evtest_sha256=${evtest_sha256}
+lsusb_elf_class=${lsusb_class}
+lsusb_elf_machine=${lsusb_machine}
+lsusb_sha256=${lsusb_sha256}
 fluxbox_elf_class=${fluxbox_class}
 fluxbox_elf_machine=${fluxbox_machine}
 fluxbox_sha256=${fluxbox_sha256}

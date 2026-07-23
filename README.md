@@ -42,6 +42,22 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
 - `7236be01b`：加入 EPYC2 reproducibility 记录和两次完整 FPGA Linux 桌面
   验证证据。
 
+2026-07-24 的 input 支持更新：
+
+- 加入 UE11 platform HCD、USB HID、generic HID、hidraw 和 evdev 配置，并把
+  driver 加入 kernel link。
+- 使用 UTMI LineState 区分无设备、Full-Speed 和不支持的 Low-Speed 设备，
+  修正 root hub attachment、disconnect、URB error return 和 RX overflow 行为。
+- 在不支持 `ECFG.VS` hardware-vector offset 的当前 SpinalHDL CPU 上，由
+  fallback interrupt dispatcher 分发 PS/2 IP5 和 USB IP6。
+- PS/2 启动参数使用 `atkbd.reset=0`，避免对当前单通道 controller 执行不兼容
+  的 reset sequence。
+- Buildroot 加入 `usbutils` 和 `evtest`，并校验 `lsusb` 的 LoongArch ELF
+  identity、runtime dependency 和 SHA256。
+
+本次更新已完成交叉编译和静态检查。PS/2 key event、USB enumeration、mouse
+event 和 disconnect 行为仍需要在后续单独进行实物验证。
+
 ## 构建
 
 构建应在 x86-64 Linux 主机（例如 EPYC2）完成，使用官方 LoongArch32
