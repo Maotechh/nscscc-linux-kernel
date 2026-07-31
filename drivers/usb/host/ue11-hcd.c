@@ -1546,6 +1546,15 @@ static void ue11h_timer(struct timer_list *t)
     // Small delay to allow data lines to settle
     udelay(3);
 
+    {
+	    u8 raw_ls;
+
+	    raw_ls = (readl(ue11->reg_base + USB_STATUS) >>
+		      USB_STATUS_LINESTATE_BITS_SHIFT) &
+		     USB_STATUS_LINESTATE_BITS_MASK;
+	    USB_LOG(USBLOG_INFO, ("USB: post-reset raw-linestate=0x%x\n", raw_ls));
+    }
+
 	ue11_update_connection_locked(ue11);
 	if ((ue11->port1 & USB_PORT_STAT_CONNECTION) &&
 	    !(ue11->port1 & USB_PORT_STAT_LOW_SPEED))
