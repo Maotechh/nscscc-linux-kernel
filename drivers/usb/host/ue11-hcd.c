@@ -1542,13 +1542,17 @@ static void ue11h_timer(struct timer_list *t)
 		 * Phase 1: the 50ms reset timer has expired; de-assert
 		 * SE0 (drive HiZ) but do not start SOF.  USB 2.0 7.1.7.5
 		 * requires a 10ms recovery window between reset de-assertion
-		 * and the first SOF packet.  Schedule Phase 2 for that.
+		 * and the first SOF packet.  At CONFIG_HZ=250 one jiffy is
+		 * 4ms, so msecs_to_jiffies(10) rounds up to 3 jiffies (an
+		 * 8-12ms real window) and can fall below the 10ms floor;
+		 * use msecs_to_jiffies(20) -> 5 jiffies (16-20ms) to
+		 * guarantee the floor is met.
 		 */
 		usbhw_hub_enable(ue11, 1, 0);
 		ue11->port1 &= ~USB_PORT_STAT_RESET;
 		ue11->reset_recovery = 1;
 		mod_timer(&ue11->timer,
-			  jiffies + msecs_to_jiffies(10));
+			  jiffies + msecs_to_jiffies(20));
 		spin_unlock_irqrestore(&ue11->lock, flags);
 		return;
 	}
