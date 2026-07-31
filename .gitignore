@@ -7,6 +7,10 @@
 !scripts/nscscc/initramfs-overlay/etc/init.d/
 !scripts/nscscc/initramfs-overlay/etc/init.d/**
 .tmp_*
+.omo/
+state/
+.checkpatch-camelcase.git.*
+README
 vmlinux
 vmlinux.bin
 System.map
