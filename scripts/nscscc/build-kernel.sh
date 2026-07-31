@@ -61,6 +61,27 @@ for command in cmp date du install python3 sha256sum stat; do
 	fi
 done
 
+# The kernel builds host tools (scripts/dtc, scripts/kconfig, ...) with
+# HOSTCC. If PATH shadows a usable system compiler (for example a conda
+# gcc whose sysroot lacks host headers such as yaml.h), those host tools
+# fail to compile. Select a host compiler that can see system headers,
+# honoring an explicit HOSTCC.
+host_cc=${HOSTCC:-}
+if [[ -z ${host_cc} ]]; then
+	for candidate in /usr/bin/gcc /usr/bin/cc gcc cc; do
+		if command -v "${candidate}" >/dev/null 2>&1 &&
+			printf '#include <yaml.h>\n' | "${candidate}" -E -x c - >/dev/null 2>&1; then
+			host_cc=${candidate}
+			break
+		fi
+	done
+fi
+if [[ -z ${host_cc} ]]; then
+	echo "No usable host C compiler found (HOSTCC must see system headers)" >&2
+	exit 1
+fi
+host_cc_sha256=$(sha256sum "$(command -v "${host_cc}")" | awk '{print $1}')
+
 source_date_epoch=${SOURCE_DATE_EPOCH:-0}
 kbuild_timestamp=${KBUILD_BUILD_TIMESTAMP:-$(
 	LC_ALL=C date --utc --date="@${source_date_epoch}" '+%Y-%m-%d %H:%M:%S UTC'
@@ -97,13 +118,13 @@ fi
 install -m 0644 "${initramfs}" "${kernel_initramfs}"
 
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
-	CROSS_COMPILE="${cross_compile}" "${defconfig}"
+	CROSS_COMPILE="${cross_compile}" HOSTCC="${host_cc}" "${defconfig}"
 "${source_dir}/scripts/config" --file "${build_dir}/.config" \
 	--set-str INITRAMFS_SOURCE "${initramfs_config_source}"
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
-	CROSS_COMPILE="${cross_compile}" olddefconfig
+	CROSS_COMPILE="${cross_compile}" HOSTCC="${host_cc}" olddefconfig
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
-	CROSS_COMPILE="${cross_compile}" \
+	CROSS_COMPILE="${cross_compile}" HOSTCC="${host_cc}" \
 	KBUILD_BUILD_TIMESTAMP="${kbuild_timestamp}" \
 	KBUILD_BUILD_USER="${kbuild_user}" \
 	KBUILD_BUILD_HOST="${kbuild_host}" \
@@ -240,6 +261,8 @@ initramfs_crc32=${initramfs_crc32}
 initramfs_reproducible=true
 toolchain_version=${toolchain_version}
 toolchain_gcc_sha256=${toolchain_gcc_sha256}
+host_cc=${host_cc}
+host_cc_sha256=${host_cc_sha256}
 kbuild_build_timestamp=${kbuild_timestamp}
 kbuild_build_user=${kbuild_user}
 kbuild_build_host=${kbuild_host}
