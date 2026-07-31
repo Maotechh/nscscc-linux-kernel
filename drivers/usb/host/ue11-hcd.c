@@ -1519,6 +1519,21 @@ static void ue11h_timer(struct timer_list *t)
 
     spin_lock_irqsave(&ue11->lock, flags);
 
+	if (ue11->port1 & USB_PORT_STAT_RESET) {
+		/*
+		 * Phase 1: the 50ms reset timer has expired; de-assert
+		 * SE0 (drive HiZ) but do not start SOF.  USB 2.0 7.1.7.5
+		 * requires a 10ms recovery window between reset de-assertion
+		 * and the first SOF packet.  Schedule Phase 2 for that.
+		 */
+		usbhw_hub_enable(ue11, 1, 0);
+		ue11->port1 &= ~USB_PORT_STAT_RESET;
+		mod_timer(&ue11->timer,
+			  jiffies + msecs_to_jiffies(10));
+		spin_unlock_irqrestore(&ue11->lock, flags);
+		return;
+	}
+
     // De-assert USB reset
 	usbhw_hub_enable(ue11, 1,
 			 !(ue11->port1 & USB_PORT_STAT_LOW_SPEED));
@@ -1526,7 +1541,6 @@ static void ue11h_timer(struct timer_list *t)
     // Small delay to allow data lines to settle
     udelay(3);
 
-    ue11->port1 &= ~USB_PORT_STAT_RESET;
 	ue11_update_connection_locked(ue11);
 	if ((ue11->port1 & USB_PORT_STAT_CONNECTION) &&
 	    !(ue11->port1 & USB_PORT_STAT_LOW_SPEED))
