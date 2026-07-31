@@ -62,6 +62,19 @@ Expected boot markers (serial, 115200 8N1):
 - initramfs unpack + `Freeing initrd memory` then BusyBox `/init`
 - `/ #` prompt (login is root, no password)
 
+Command-line precedence (verified in `arch/loongarch/kernel/setup.c` +
+`drivers/of/fdt.c`): `bootcmdline_init()` runs before `platform_init()`, and
+`early_init_dt_scan_chosen()` then overwrites `boot_command_line` with the
+DTS `chosen/bootargs`. So `/proc/cmdline` shows the DTS bootargs
+`earlycon atkbd.reset=0 psmouse.proto=bare` and NOT the `bootelf` tail args.
+The bootelf tail (`console=ttyS0,115200 rdinit=/init loglevel=8`) is still
+consumed as `__setup` early params from the bootloader line (this is what
+produced the working serial shell on 2026-07-22, whose log shows
+`Kernel command line: earlycon`), while `atkbd.reset=0` and
+`psmouse.proto=bare` are parsed from `saved_command_line` during initcalls
+and therefore ARE active on board. Capture `cat /proc/cmdline` and confirm
+it contains both PS/2 flags.
+
 ## Evidence to capture (per lane, separate files)
 
 ### USB enumeration and HID
