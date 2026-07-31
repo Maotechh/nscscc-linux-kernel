@@ -453,6 +453,13 @@ static void port_power(struct ue11 *ue11, int is_on)
 
     USB_LOG(USBLOG_INFO, ("USB: port_power %s\n", is_on ? "ON" : "OFF"));
 
+	/*
+	 * power-off, suspend and stop all terminate a pending post-reset
+	 * recovery epoch; never let a stale flag suppress disconnect
+	 * detection across a power cycle.
+	 */
+	ue11->reset_recovery = 0;
+
     /* hub is inactive unless the port is powered */
     if (is_on) {
         if (ue11->port1 & USB_PORT_STAT_POWER)
@@ -879,8 +886,7 @@ static void ue11_update_connection_locked(struct ue11 *ue11)
 	u8 linestate;
 
 	if (!(ue11->port1 & USB_PORT_STAT_POWER) ||
-	    (ue11->port1 & USB_PORT_STAT_RESET) ||
-	    ue11->reset_recovery)
+	    (ue11->port1 & USB_PORT_STAT_RESET))
 		return;
 
 	linestate = ue11_read_stable_linestate(ue11);
@@ -890,6 +896,16 @@ static void ue11_update_connection_locked(struct ue11 *ue11)
 
 	if (ue11->port1 & USB_PORT_STAT_CONNECTION) {
 		if (linestate != UE11_LINESTATE_SE0)
+			return;
+
+		/*
+		 * During the post-reset recovery epoch a device may
+		 * transiently present SE0 before re-asserting its D+
+		 * pull-up.  Suppress only the disconnect reporting here;
+		 * connect detection (FS-J/FS-K -> CONNECTION) still runs
+		 * so a late pull-up is observed as a connection.
+		 */
+		if (ue11->reset_recovery)
 			return;
 
 		ue11->irq_enable = 0;
