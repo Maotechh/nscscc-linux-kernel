@@ -106,10 +106,15 @@ CRC32 value the board reported.
 
 ## Board lane status on 2026-07-31
 
-From the automation host, the board subnet (`10.90.50.43/44`) and even the
-fpga-agent SSH gateway (`10.20.213.157:22`, reachable in iter-027) are now
-unreachable: no interfaces, routes, ARP, ICMP, or TFTP responses. On-board
-execution therefore has to be run from the Windows desktop (Tftpd32 +
-SecureCRT), or the board must be reachable from the automation host. Until
-real board logs are returned, USB and PS/2 remain unfixed per audit advice
-`20260731T141815Z-5b0043f9`.
+From the automation host, the board TFTP subnet (`10.90.50.43/44`) is not
+directly reachable: TCP 22/80 time out and UDP 69 (TFTP RRQ probe) gets no
+response, so on-board execution has to be run from the Windows desktop
+(Tftpd32 + SecureCRT), or the board must be reachable from the automation
+host. The automation host's eth0 is up (172.24.224.206) and the fpga-agent
+SSH gateway (`10.20.213.157:22`) is reachable (OpenSSH for Windows 9.5) for
+the CPU lane's serialized `nscscc-fpga-evaluate` workflow; this Linux
+campaign has no direct board-subnet path. Until real board logs are
+returned, USB and PS/2 remain unfixed per audit advice
+`20260731T141815Z-5b0043f9`. The committed evidence set for this candidate
+is `c036cdb91` (initramfs x2 + manifest + this contract) on top of
+`0de802777`.
