@@ -1549,6 +1549,23 @@ static void ue11h_timer(struct timer_list *t)
 
     spin_lock_irqsave(&ue11->lock, flags);
 
+	/*
+	 * Guard against a stale armed timer firing after the epoch was
+	 * terminated.  port_power(ue11, 0) (power-off, suspend, stop)
+	 * clears USB_PORT_STAT_POWER and sets HC_STATE_HALT but does not
+	 * cancel an already-armed recovery timer, so the callback must
+	 * re-validate the port state before touching the controller.
+	 * Without this, Phase 2 below would run the post-reset completion
+	 * path against an inactive port and could set port state after
+	 * the port was powered off.
+	 */
+	if (!(ue11->port1 & USB_PORT_STAT_POWER) ||
+	    hcd->state == HC_STATE_HALT) {
+		ue11->reset_recovery = 0;
+		spin_unlock_irqrestore(&ue11->lock, flags);
+		return;
+	}
+
 	if (ue11->port1 & USB_PORT_STAT_RESET) {
 		/*
 		 * Phase 1: the 50ms reset timer has expired; de-assert
@@ -1964,41 +1981,53 @@ static int ue11h_probe(struct platform_device *dev)
 //-----------------------------------------------------------------
 static int ue11h_suspend(struct platform_device *dev, pm_message_t state)
 {
-    struct usb_hcd  *hcd = platform_get_drvdata(dev);
-    struct ue11    *ue11 = hcd_to_ue11(hcd);
-    int     retval = 0;
+	struct usb_hcd  *hcd = platform_get_drvdata(dev);
+	struct ue11    *ue11 = hcd_to_ue11(hcd);
+	unsigned long   flags;
+	int     retval = 0;
 
-    switch (state.event) {
-    case PM_EVENT_FREEZE:
-        retval = ue11h_bus_suspend(hcd);
-        break;
-    case PM_EVENT_SUSPEND:
-    case PM_EVENT_HIBERNATE:
-    case PM_EVENT_PRETHAW:      /* explicitly discard hw state */
-        port_power(ue11, 0);
-        break;
-    }
-    return retval;
+	switch (state.event) {
+	case PM_EVENT_FREEZE:
+		retval = ue11h_bus_suspend(hcd);
+		break;
+	case PM_EVENT_SUSPEND:
+	case PM_EVENT_HIBERNATE:
+	case PM_EVENT_PRETHAW:      /* explicitly discard hw state */
+		/*
+		 * Mirror ue11h_stop(): drop the recovery timer first so a
+		 * pending reset/rmw epoch cannot fire against a powered-off
+		 * port, then serialize port_power with the timer callback.
+		 */
+		del_timer_sync(&ue11->timer);
+		spin_lock_irqsave(&ue11->lock, flags);
+		port_power(ue11, 0);
+		spin_unlock_irqrestore(&ue11->lock, flags);
+		break;
+	}
+	return retval;
 }
 //-----------------------------------------------------------------
 // ue11h_resume:
 //-----------------------------------------------------------------
 static int ue11h_resume(struct platform_device *dev)
 {
-    struct usb_hcd  *hcd = platform_get_drvdata(dev);
-    struct ue11    *ue11 = hcd_to_ue11(hcd);
+	struct usb_hcd  *hcd = platform_get_drvdata(dev);
+	struct ue11    *ue11 = hcd_to_ue11(hcd);
+	unsigned long   flags;
 
-    /* with no "check to see if VBUS is still powered" board hook,
-     * let's assume it'd only be powered to enable remote wakeup.
-     */
-    if (!ue11->port1 || !device_can_wakeup(&hcd->self.root_hub->dev)) {
-        ue11->port1 = 0;
-        port_power(ue11, 1);
-        usb_root_hub_lost_power(hcd->self.root_hub);
-        return 0;
-    }
+	/* with no "check to see if VBUS is still powered" board hook,
+	 * let's assume it'd only be powered to enable remote wakeup.
+	 */
+	if (!ue11->port1 || !device_can_wakeup(&hcd->self.root_hub->dev)) {
+		spin_lock_irqsave(&ue11->lock, flags);
+		ue11->port1 = 0;
+		port_power(ue11, 1);
+		spin_unlock_irqrestore(&ue11->lock, flags);
+		usb_root_hub_lost_power(hcd->self.root_hub);
+		return 0;
+	}
 
-    return ue11h_bus_resume(hcd);
+	return ue11h_bus_resume(hcd);
 }
 
 #else
