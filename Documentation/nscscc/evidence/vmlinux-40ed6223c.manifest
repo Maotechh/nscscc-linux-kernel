@@ -1,4 +1,18 @@
 kernel_commit=40ed6223c66b0ff8ab24ab8db27da8302db0abac
+# vmlinux binaries are NOT committed to this repository (repo hygiene; see
+# .gitignore).  artifact=/debug_artifact= below point at untracked local
+# build outputs under .omo/.  To verify the sha256 below, rebuild this
+# kernel_commit with the documented flow:
+#   export ARCH=loongarch
+#   export CROSS_COMPILE=<loongarch32r-linux-gnusf- 8.3.0 toolchain>/bin/loongarch32r-linux-gnusf-
+#   scripts/nscscc/build-kernel.sh <base_rootfs> <build_dir> <artifact_dir>
+#   # NSCSCC_DEFCONFIG=la32_defconfig; embedded initramfs source must be
+#   # nscscc-initramfs-40ed6223c.cpio.gz with sha256 82b5e4f7... and crc32
+#   # f9659730 (same-host reproducible; see "Caveat" in iteration 026).
+#   # A rebuild must produce size=13550412, sha256=b565fda1..., crc32=b63f1d89
+#   # for the stripped vmlinux-40ed6223c artifact.
+# committed=false
+# operator reference: Documentation/nscscc/hardware-validation-candidate-40ed6223c.md
 artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-026b/artifacts/vmlinux-40ed6223c
 debug_artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-026b/artifacts/vmlinux-40ed6223c-debug
 debug_size=214027964
