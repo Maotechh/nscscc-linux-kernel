@@ -42,7 +42,7 @@
 #define USBLOG_DATA     4
 
 // Current USB_LOG level
-#define USBLOG_LEVEL    USBLOG_REQ
+#define USBLOG_LEVEL    USBLOG_ERR
 
 #define USB_LOG(l,a)    do { if (l <= USBLOG_LEVEL) printk a; } while (0)
 
@@ -375,7 +375,8 @@ static void usbhw_hub_reset(struct ue11 *ue11)
 {
     uint32_t val;
 
-    USB_LOG(USBLOG_INFO, ("HW: Enter USB bus reset\n"));
+	dev_info(ue11_to_hcd(ue11)->self.controller,
+		 "HW: Enter USB bus reset\n");
 
     // Power-up / SE0
     val = 0;
@@ -451,7 +452,8 @@ static void port_power(struct ue11 *ue11, int is_on)
 {
     struct usb_hcd  *hcd = ue11_to_hcd(ue11);
 
-    USB_LOG(USBLOG_INFO, ("USB: port_power %s\n", is_on ? "ON" : "OFF"));
+	dev_info(hcd->self.controller,
+		 "USB: port power %s\n", is_on ? "ON" : "OFF");
 
 	/*
 	 * power-off, suspend and stop all terminate a pending post-reset
@@ -1570,7 +1572,8 @@ static void ue11h_timer(struct timer_list *t)
 	    raw_ls = (readl(ue11->reg_base + USB_STATUS) >>
 		      USB_STATUS_LINESTATE_BITS_SHIFT) &
 		     USB_STATUS_LINESTATE_BITS_MASK;
-	    USB_LOG(USBLOG_REQ, ("USB: post-reset raw-linestate=0x%x\n", raw_ls));
+	    dev_info(hcd->self.controller,
+		     "USB: post-reset raw-linestate=0x%x\n", raw_ls);
     }
 
 	/*
@@ -1590,11 +1593,12 @@ static void ue11h_timer(struct timer_list *t)
 	ue11->port1 |= USB_PORT_STAT_C_RESET << 16;
 	ue11->reset_recovery = 0;
 
-	USB_LOG(USBLOG_INFO, ("USB: post-reset port=0x%x conn=%d enable=%d low_speed=%d\n",
-		ue11->port1,
-		!!(ue11->port1 & USB_PORT_STAT_CONNECTION),
-		!!(ue11->port1 & USB_PORT_STAT_ENABLE),
-		!!(ue11->port1 & USB_PORT_STAT_LOW_SPEED)));
+	dev_info(hcd->self.controller,
+		 "USB: post-reset port=0x%x conn=%d enable=%d low_speed=%d\n",
+		 ue11->port1,
+		 !!(ue11->port1 & USB_PORT_STAT_CONNECTION),
+		 !!(ue11->port1 & USB_PORT_STAT_ENABLE),
+		 !!(ue11->port1 & USB_PORT_STAT_LOW_SPEED));
 
     // Enable USB interrupts
 	if (ue11->port1 & USB_PORT_STAT_ENABLE)
