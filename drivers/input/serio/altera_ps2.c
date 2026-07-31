@@ -35,6 +35,8 @@ static irqreturn_t altera_ps2_rxint(int irq, void *dev_id)
 	irqreturn_t handled = IRQ_NONE;
 
 	while ((status = readl(ps2if->base)) & 0xffff0000) {
+		dev_dbg(ps2if->io->dev.parent, "rx: 0x%02x (status=0x%08x)\n",
+			status & 0xff, status);
 		serio_interrupt(ps2if->io, status & 0xff, 0);
 		handled = IRQ_HANDLED;
 	}
@@ -49,6 +51,7 @@ static int altera_ps2_write(struct serio *io, unsigned char val)
 {
 	struct ps2if *ps2if = io->port_data;
 
+	dev_dbg(io->dev.parent, "tx: 0x%02x\n", val);
 	writel(val, ps2if->base);
 	return 0;
 }
@@ -56,6 +59,8 @@ static int altera_ps2_write(struct serio *io, unsigned char val)
 static int altera_ps2_open(struct serio *io)
 {
 	struct ps2if *ps2if = io->port_data;
+
+	dev_info(io->dev.parent, "port opened\n");
 
 	/* clear fifo */
 	while (readl(ps2if->base) & 0xffff0000)
