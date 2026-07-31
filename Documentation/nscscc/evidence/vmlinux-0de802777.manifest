@@ -1,0 +1,52 @@
+kernel_commit=0de802777ff3729b486178e203b5ff6d48f28998
+# vmlinux binaries are NOT committed to this repository (repo hygiene; see
+# .gitignore).  artifact=/debug_artifact= below point at untracked local
+# build outputs under .omo/.  To verify the sha256 below, rebuild this
+# kernel_commit with the documented flow:
+#   export ARCH=loongarch
+#   export CROSS_COMPILE=<loongarch32r-linux-gnusf- 8.3.0 toolchain>/bin/loongarch32r-linux-gnusf-
+#   scripts/nscscc/build-kernel.sh <base_rootfs> <build_dir> <artifact_dir>
+#   # NSCSCC_DEFCONFIG=la32_defconfig; embedded initramfs source must be
+#   # nscscc-initramfs-0de802777.cpio.gz with sha256 9d040512... and crc32
+#   # 38589e5a (same-host reproducible; see iteration 029).
+#   # A rebuild must produce size=13550412, sha256=6ceacb50..., crc32=3e1d4b5c
+#   # for the stripped vmlinux-0de802777 artifact.
+# committed=false
+# operator reference: Documentation/nscscc/hardware-validation-candidate-0de802777.md
+artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-029b/artifacts/vmlinux-0de802777
+debug_artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-029b/artifacts/vmlinux-0de802777-debug
+debug_size=214028620
+debug_sha256=5c239d657d78d29a675ecf9b1f443294bbb4251eb2d266543480c0a464cbb567
+kernel_config_sha256=51905e1e85fd24bfd9c23ad6b34e6bdc844c3e11a558413ee60ab20d44cca7b1
+base_rootfs=.omo/verify-025/minimal-rootfs
+base_rootfs_bytes=2305029
+busybox_size=2280236
+busybox_sha256=c7d3635f3ace178a6e121016f7cc06cd1ef4fd4651cbf84f216d3a0dad28cae0
+desktop_build_info_sha256=unavailable
+initramfs=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-029b/artifacts/initramfs-0de802777.cpio.gz
+initramfs_repeat=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-029b/artifacts/initramfs-0de802777-repeat.cpio.gz
+initramfs_config_source=nscscc-initramfs-0de802777.cpio.gz
+initramfs_size=1290382
+initramfs_sha256=9d04051239456c0169ae72d535dd60e7d4b53a3a8e78af749c5c2726beb14854
+initramfs_crc32=38589e5a
+initramfs_reproducible=true
+toolchain_version=8.3.0
+toolchain_gcc_sha256=f29812336f8f0cedfd55a56f834ec9a88178d3bfb31fd67e105342aa8ed2ef7c
+kbuild_build_timestamp=1970-01-01 00:00:00 UTC
+kbuild_build_user=nscscc
+kbuild_build_host=nscscc-build
+kbuild_build_version=1
+size=13550412
+sha256=6ceacb50e228c9fabe4d133484bbff824a690a3e4daa0d2a6b21cd65a70b469f
+crc32=3e1d4b5c
+elf_class=ELF32
+elf_machine=LoongArch
+entry=0xa0bb0270
+kernel_entry=0xa0bb0270
+first_load=0xa0300000
+load_memsz=0xd6c7ac
+load_count=1
+load_end=0xa106c7ac
+tftp_address=0xa3000000
+tftp_end=0xa3cec34c
+ddr_end=0xa8000000
