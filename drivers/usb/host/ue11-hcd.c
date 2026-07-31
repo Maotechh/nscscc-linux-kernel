@@ -450,6 +450,8 @@ static void port_power(struct ue11 *ue11, int is_on)
 {
     struct usb_hcd  *hcd = ue11_to_hcd(ue11);
 
+    USB_LOG(USBLOG_INFO, ("USB: port_power %s\n", is_on ? "ON" : "OFF"));
+
     /* hub is inactive unless the port is powered */
     if (is_on) {
         if (ue11->port1 & USB_PORT_STAT_POWER)
@@ -1532,6 +1534,12 @@ static void ue11h_timer(struct timer_list *t)
 	else
 		ue11->port1 &= ~USB_PORT_STAT_ENABLE;
 	ue11->port1 |= USB_PORT_STAT_C_RESET << 16;
+
+	USB_LOG(USBLOG_INFO, ("USB: post-reset port=0x%x conn=%d enable=%d low_speed=%d\n",
+		ue11->port1,
+		!!(ue11->port1 & USB_PORT_STAT_CONNECTION),
+		!!(ue11->port1 & USB_PORT_STAT_ENABLE),
+		!!(ue11->port1 & USB_PORT_STAT_LOW_SPEED)));
 
     // Enable USB interrupts
 	if (ue11->port1 & USB_PORT_STAT_ENABLE)
