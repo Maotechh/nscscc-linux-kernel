@@ -14,7 +14,7 @@
 
 	chosen {
 		stdout-path = "serial0:115200n8";
-		bootargs = "earlycon atkbd.reset=0";
+		bootargs = "earlycon atkbd.reset=0 psmouse.proto=bare";
 	};
 
 	extioiic: interrupt-controller@0x1fe11600 {
