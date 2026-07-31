@@ -1537,8 +1537,6 @@ static void ue11h_timer(struct timer_list *t)
 		return;
 	}
 
-	ue11->reset_recovery = 0;
-
     // De-assert USB reset
 	usbhw_hub_enable(ue11, 1,
 			 !(ue11->port1 & USB_PORT_STAT_LOW_SPEED));
@@ -1552,9 +1550,17 @@ static void ue11h_timer(struct timer_list *t)
 	    raw_ls = (readl(ue11->reg_base + USB_STATUS) >>
 		      USB_STATUS_LINESTATE_BITS_SHIFT) &
 		     USB_STATUS_LINESTATE_BITS_MASK;
-	    USB_LOG(USBLOG_INFO, ("USB: post-reset raw-linestate=0x%x\n", raw_ls));
+	    USB_LOG(USBLOG_REQ, ("USB: post-reset raw-linestate=0x%x\n", raw_ls));
     }
 
+	/*
+	 * Keep reset_recovery set while evaluating the connection so the
+	 * disconnect check inside ue11_update_connection_locked() stays
+	 * suppressed for the whole 7.1.7.5 recovery epoch.  A device that
+	 * re-presents its D+ pull-up late must be observed as a connection,
+	 * not mis-read as a disconnect.  Clear it only after the connection
+	 * state has been updated below.
+	 */
 	ue11_update_connection_locked(ue11);
 	if ((ue11->port1 & USB_PORT_STAT_CONNECTION) &&
 	    !(ue11->port1 & USB_PORT_STAT_LOW_SPEED))
@@ -1562,6 +1568,7 @@ static void ue11h_timer(struct timer_list *t)
 	else
 		ue11->port1 &= ~USB_PORT_STAT_ENABLE;
 	ue11->port1 |= USB_PORT_STAT_C_RESET << 16;
+	ue11->reset_recovery = 0;
 
 	USB_LOG(USBLOG_INFO, ("USB: post-reset port=0x%x conn=%d enable=%d low_speed=%d\n",
 		ue11->port1,
