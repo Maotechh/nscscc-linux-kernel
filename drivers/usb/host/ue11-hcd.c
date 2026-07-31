@@ -455,21 +455,31 @@ static void port_power(struct ue11 *ue11, int is_on)
 	dev_info(hcd->self.controller,
 		 "USB: port power %s\n", is_on ? "ON" : "OFF");
 
-	/*
-	 * power-off, suspend and stop all terminate a pending post-reset
-	 * recovery epoch; never let a stale flag suppress disconnect
-	 * detection across a power cycle.
-	 */
-	ue11->reset_recovery = 0;
-
     /* hub is inactive unless the port is powered */
     if (is_on) {
         if (ue11->port1 & USB_PORT_STAT_POWER)
             return;
 
+	/*
+	 * Genuine power-on transition: terminate a pending post-reset
+	 * recovery epoch so a stale flag never suppresses disconnect
+	 * detection across a power cycle.  Do not clear on the
+	 * already-powered no-op path above: a redundant SetPortFeature
+	 * (POWER) issued mid-epoch by hub core must not abort the
+	 * 7.1.7.5 recovery window early.
+	 */
+	ue11->reset_recovery = 0;
+
         ue11->port1      = USB_PORT_STAT_POWER;
         ue11->irq_enable = 0;
     } else {
+	/*
+	 * power-off, suspend and stop terminate a pending post-reset
+	 * recovery epoch; never let a stale flag suppress disconnect
+	 * detection across a power cycle.
+	 */
+	ue11->reset_recovery = 0;
+
         ue11->port1      = 0;
         ue11->irq_enable = 0;
         hcd->state = HC_STATE_HALT;
@@ -1549,7 +1559,17 @@ static void ue11h_timer(struct timer_list *t)
 		 * 8-12ms real window) and can fall below the 10ms floor;
 		 * use msecs_to_jiffies(20) -> 5 jiffies (16-20ms) to
 		 * guarantee the floor is met.
+		 *
+		 * Present ENABLE now, while SOF stays gated.  The hub core
+		 * polls the port at HUB_ROOT_RESET_TIME (60ms) after
+		 * issuing the reset (hub_port_wait_reset) and returns
+		 * -EBUSY unless ENABLE is already visible, forcing a
+		 * redundant full reset cycle.  The 7.1.7.5 floor is
+		 * preserved because SOF remains delayed to Phase 2 below.
 		 */
+		if ((ue11->port1 & USB_PORT_STAT_CONNECTION) &&
+		    !(ue11->port1 & USB_PORT_STAT_LOW_SPEED))
+			ue11->port1 |= USB_PORT_STAT_ENABLE;
 		usbhw_hub_enable(ue11, 1, 0);
 		ue11->port1 &= ~USB_PORT_STAT_RESET;
 		ue11->reset_recovery = 1;
