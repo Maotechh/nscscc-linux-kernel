@@ -235,6 +235,7 @@ struct ue11 {
     u32                 port1;
     u32                 irq_enable;
     u16                 frame;
+    int                 reset_recovery;
 
     /* async schedule: control, bulk */
     struct list_head    async;
@@ -878,7 +879,8 @@ static void ue11_update_connection_locked(struct ue11 *ue11)
 	u8 linestate;
 
 	if (!(ue11->port1 & USB_PORT_STAT_POWER) ||
-	    (ue11->port1 & USB_PORT_STAT_RESET))
+	    (ue11->port1 & USB_PORT_STAT_RESET) ||
+	    ue11->reset_recovery)
 		return;
 
 	linestate = ue11_read_stable_linestate(ue11);
@@ -1528,11 +1530,14 @@ static void ue11h_timer(struct timer_list *t)
 		 */
 		usbhw_hub_enable(ue11, 1, 0);
 		ue11->port1 &= ~USB_PORT_STAT_RESET;
+		ue11->reset_recovery = 1;
 		mod_timer(&ue11->timer,
 			  jiffies + msecs_to_jiffies(10));
 		spin_unlock_irqrestore(&ue11->lock, flags);
 		return;
 	}
+
+	ue11->reset_recovery = 0;
 
     // De-assert USB reset
 	usbhw_hub_enable(ue11, 1,
