@@ -42,7 +42,7 @@
 #define USBLOG_DATA     4
 
 // Current USB_LOG level
-#define USBLOG_LEVEL    USBLOG_ERR
+#define USBLOG_LEVEL    USBLOG_REQ
 
 #define USB_LOG(l,a)    do { if (l <= USBLOG_LEVEL) printk a; } while (0)
 
@@ -397,8 +397,7 @@ static void usbhw_hub_enable(struct ue11 *ue11, int full_speed, int enable_sof)
     USB_LOG(USBLOG_INFO, ("HW: Enable root hub\n"));
 
     if (!full_speed)
-        dev_warn_once(ue11_to_hcd(ue11)->self.controller,
-                      "low-speed USB is not supported\n");
+        USB_LOG(USBLOG_INFO, ("low-speed USB is not supported\n"));
 
     // Host Full Speed
     val = 0;
@@ -620,8 +619,8 @@ static void in_packet(struct ue11 *ue11, struct ue11h_ep *ep, struct urb *urb)
     ctrl|= (1 << USB_XFER_TOKEN_IN_SHIFT);    // Device -> Host
     ctrl|= (1 << USB_XFER_TOKEN_ACK_SHIFT);   // Respond with ACK
 
-    // DataX?
-    //ctrl|=  usb_gettoggle(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe)) ? (1 << USB_XFER_TOKEN_PID_DATAX_SHIFT) : (0 << USB_XFER_TOKEN_PID_DATAX_SHIFT);
+	ctrl |= usb_gettoggle(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe)) ?
+		(1 << USB_XFER_TOKEN_PID_DATAX_SHIFT) : (0 << USB_XFER_TOKEN_PID_DATAX_SHIFT);
 
     token = (((uint32_t)USB_PID_IN)<<USB_XFER_TOKEN_PID_BITS_SHIFT) | (device_addr << USB_XFER_TOKEN_DEV_ADDR_SHIFT) | (endpoint << USB_XFER_TOKEN_EP_ADDR_SHIFT);
     writel(token | ctrl, ue11->reg_base + USB_XFER_TOKEN);
@@ -960,10 +959,16 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
     if (((ep->nextpid == USB_PID_IN) || (ep->nextpid == USB_PID_ACK)) && 
         (response == USB_PID_DATA0 || response == USB_PID_DATA1))
     {
-        // TODO: Check DATAx is correct
+		int expected = usb_gettoggle(urb->dev,
+				usb_pipeendpoint(urb->pipe),
+				usb_pipeout(urb->pipe));
+		int received = (response == USB_PID_DATA1);
 
-        // Convert to ACK if all is well...
-        response = USB_PID_ACK;
+		if (expected == received)
+			response = USB_PID_ACK;
+		else
+			USB_LOG(USBLOG_ERR, ("USB: DATAx mismatch ep=%02x exp=%d got=%d\n",
+				usb_pipeendpoint(urb->pipe), expected, received));
     }
 
 
