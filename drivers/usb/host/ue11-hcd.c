@@ -235,7 +235,7 @@ struct ue11 {
     u32                 port1;
     u32                 irq_enable;
     u16                 frame;
-    int                 reset_recovery;
+	int                 reset_recovery;
 
     /* async schedule: control, bulk */
     struct list_head    async;
@@ -398,8 +398,8 @@ static void usbhw_hub_enable(struct ue11 *ue11, int full_speed, int enable_sof)
 
     USB_LOG(USBLOG_INFO, ("HW: Enable root hub\n"));
 
-    if (!full_speed)
-        USB_LOG(USBLOG_INFO, ("low-speed USB is not supported\n"));
+	if (!full_speed)
+		USB_LOG(USBLOG_INFO, ("low-speed USB is not supported\n"));
 
     // Host Full Speed
     val = 0;
@@ -1586,15 +1586,15 @@ static void ue11h_timer(struct timer_list *t)
     // Small delay to allow data lines to settle
     udelay(3);
 
-    {
-	    u8 raw_ls;
+	{
+		u8 raw_ls;
 
-	    raw_ls = (readl(ue11->reg_base + USB_STATUS) >>
-		      USB_STATUS_LINESTATE_BITS_SHIFT) &
-		     USB_STATUS_LINESTATE_BITS_MASK;
-	    dev_info(hcd->self.controller,
-		     "USB: post-reset raw-linestate=0x%x\n", raw_ls);
-    }
+		raw_ls = (readl(ue11->reg_base + USB_STATUS) >>
+			  USB_STATUS_LINESTATE_BITS_SHIFT) &
+			 USB_STATUS_LINESTATE_BITS_MASK;
+		dev_info(hcd->self.controller,
+			 "USB: post-reset raw-linestate=0x%x\n", raw_ls);
+	}
 
 	/*
 	 * Keep reset_recovery set while evaluating the connection so the
