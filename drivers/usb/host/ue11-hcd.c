@@ -1833,6 +1833,14 @@ static int ue11h_start(struct usb_hcd *hcd)
 
 	/* chip has been reset, VBUS power is off */
 	hcd->state = HC_STATE_RUNNING;
+	/*
+	 * The recovery timer cannot be pending here: the first start runs
+	 * right after timer_setup() in probe (never armed), and any restart
+	 * is preceded by ue11h_stop()/ue11h_suspend() which both
+	 * del_timer_sync().  A WARN_ON keeps this invariant honest so a
+	 * stale armed timer can never race the VBUS power-on below.
+	 */
+	WARN_ON(timer_pending(&ue11->timer));
 	/* enable power and interrupts */
 	spin_lock_irqsave(&ue11->lock, flags);
 	port_power(ue11, 1);
