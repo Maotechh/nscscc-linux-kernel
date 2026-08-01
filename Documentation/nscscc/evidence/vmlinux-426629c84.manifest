@@ -1,0 +1,60 @@
+kernel_commit=426629c84341021c5e00fbe0e11b8d6ed3e9507c
+# vmlinux binaries are NOT committed to this repository (repo hygiene; see
+# .gitignore).  artifact=/debug_artifact= below point at untracked local
+# build outputs under .omo/.  To verify the sha256 below, rebuild this
+# kernel_commit with the documented flow:
+#   export ARCH=loongarch
+#   export CROSS_COMPILE=<loongarch32r-linux-gnusf- 8.3.0 toolchain>/bin/loongarch32r-linux-gnusf-
+#   scripts/nscscc/build-kernel.sh <base_rootfs> <build_dir> <artifact_dir>
+#   # NSCSCC_DEFCONFIG=la32_defconfig; embedded initramfs source must be
+#   # nscscc-initramfs-426629c84.cpio.gz with sha256 0c18889c... and crc32
+#   # 4899a0b9 (same-host reproducible; verify-035 -repeat matches).
+#   # A rebuild must produce size=13550412, sha256=57423cb6..., crc32=55c70e55
+#   # for the stripped vmlinux-426629c84 artifact.
+# committed=false
+# operator reference: Documentation/nscscc/hardware-validation-candidate-426629c84.md
+# PATH-BOUND QUALIFIER: this build is bound to the host compiler recorded
+# below (host_cc=/usr/bin/gcc, sha256 6cb2d84c...).  A rebuild with a
+# different host compiler, or a source tree checked out at a different path,
+# is NOT expected to reproduce these hashes byte-for-byte; the recorded
+# hashes attest to THIS exact host/toolchain/source-dir triple (iteration
+# 035 canonical clean build at committed HEAD).
+artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-035/artifacts/vmlinux-426629c84
+debug_artifact=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-035/artifacts/vmlinux-426629c84-debug
+debug_size=214029944
+debug_sha256=4616efcb3045a78e8129bf62aaca9a5eb7d63eb7cb19ac543bce466db7d87f99
+kernel_config_sha256=aaeceea20d03ac5c819a21a4ae25d28857b70897eb93cf56e4e3fa725f956707
+base_rootfs=.omo/verify-025/minimal-rootfs
+base_rootfs_bytes=2305029
+busybox_size=2280236
+busybox_sha256=c7d3635f3ace178a6e121016f7cc06cd1ef4fd4651cbf84f216d3a0dad28cae0
+desktop_build_info_sha256=unavailable
+initramfs=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-035/artifacts/initramfs-426629c84.cpio.gz
+initramfs_repeat=/2022533109/liubushi/appdata/longxine-multiagent/worktrees/kernel/linux-continuous/integration/.omo/verify-035/artifacts/initramfs-426629c84-repeat.cpio.gz
+initramfs_config_source=nscscc-initramfs-426629c84.cpio.gz
+initramfs_size=1290383
+initramfs_sha256=0c18889c0e4f340cb754b49becdd8cecac6c2e9a1ba71752887016b74ddeb2c6
+initramfs_crc32=4899a0b9
+initramfs_reproducible=true
+toolchain_version=8.3.0
+toolchain_gcc_sha256=f29812336f8f0cedfd55a56f834ec9a88178d3bfb31fd67e105342aa8ed2ef7c
+host_cc=/usr/bin/gcc
+host_cc_sha256=6cb2d84ccd9fd3485d4e47ba032e626be65692601c38fad46866a6b565f3100f
+kbuild_build_timestamp=1970-01-01 00:00:00 UTC
+kbuild_build_user=nscscc
+kbuild_build_host=nscscc-build
+kbuild_build_version=1
+size=13550412
+sha256=57423cb616358ee47822f99d67f238319fd3f09a0dfdeb960ecdfe4ba896cc32
+crc32=55c70e55
+elf_class=ELF32
+elf_machine=LoongArch
+entry=0xa0bb02e0
+kernel_entry=0xa0bb02e0
+first_load=0xa0300000
+load_memsz=0xd6c7ac
+load_count=1
+load_end=0xa106c7ac
+tftp_address=0xa3000000
+tftp_end=0xa3cec34c
+ddr_end=0xa8000000

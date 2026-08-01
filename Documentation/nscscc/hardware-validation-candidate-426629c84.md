@@ -1,51 +1,75 @@
-# Board Handoff Contract: candidate `0de802777`
+# Board Handoff Contract: candidate `426629c84`
 
-> SUPERSEDED on 2026-08-01 by
-> [`hardware-validation-candidate-426629c84.md`](hardware-validation-candidate-426629c84.md)
-> for the board lane. `426629c84` adds the `ue11h_start` power-on lock
-> (`426629c84`) and records the canonical clean build at committed HEAD
-> (verify-035, sha256 `57423cb6...`, crc32 `55c70e55`, entry `0xa0bb02e0`).
+This document is the single handoff contract for evaluating kernel candidate
+commit `426629c84` on the NSCSCC 实验箱. It supersedes
+`hardware-validation-candidate-0de802777.md` (and in turn
+`hardware-validation-candidate-40ed6223c.md`) for the USB/PS-2 lanes when the
+on-board evidence below is captured and returned.
 
-This document was the handoff contract for evaluating kernel candidate
-commit `0de802777` on the NSCSCC 实验箱. It superseded
-`hardware-validation-candidate-40ed6223c.md` for the USB/PS-2 lanes only
-when the on-board evidence below was captured and returned. It is retained
-for historical/divergence reference; do not transfer the `0de802777` bytes
-to the board for a new run.
+The handoff triple is `{bitstream, vmlinux@426629c84, initramfs}`: the board
+run is only meaningful with all three bound together and hashed as recorded
+below.
 
-Candidate identity and scope:
+## Candidate identity and scope
 
-- kernel_commit=`0de802777ff3729b486178e203b5ff6d48f28998`
-- base=`aa3888d6a5c658d05da518a24c26a2fbe4b678c1`, 16 commits, kernel
-  source diff 3 files (`ue11-hcd.c`, `altera_ps2.c`, `loongson32_ls.dts`),
-  +165/-39
-- This candidate = `40ed6223c` plus the stale-recovery-timer guard and PM
-  `port_power` serialization (`f2e9458da`). It does NOT yet prove USB/PS-2
-  on hardware.
+- kernel_commit=`426629c84341021c5e00fbe0e11b8d6ed3e9507c`
+- base=`aa3888d6a5c658d05da518a24c26a2fbe4b678c1`, 16 commits
+- This candidate = `0de802777` + the host-compiler reproducibility fix
+  (`608939906`) + the `ue11h_start` power-on serialization under `ue11->lock`
+  (`426629c84`). It does NOT yet prove USB/PS-2 on hardware.
+- Divergence from `0de802777`: entry moved `0xa0bb0270 -> 0xa0bb02e0` and the
+  canonical artifact hash changed (see below) because `426629c84` adds the
+  `ue11h_start` lock and because the embedded initramfs `build-info` now
+  records `KERNEL_SOURCE_COMMIT=426629c84`. The verify-034 working-tree build
+  (`46cba84d...`) was a pre-commit artifact and is NOT the handoff artifact.
 
-## Artifacts to transfer
+## Artifacts to transfer (the triple)
 
-Transfer exactly the artifact bytes in `vmlinux-0de802777.manifest`
+Transfer exactly the artifact bytes in `vmlinux-426629c84.manifest`
 (`Documentation/nscscc/evidence/`). Verify TFTP byte count and CRC32 before
 `bootelf`:
 
 ```text
 size=13550412
-sha256=6ceacb50e228c9fabe4d133484bbff824a690a3e4daa0d2a6b21cd65a70b469f
-crc32=3e1d4b5c
-entry=0xa0bb0270
+sha256=57423cb616358ee47822f99d67f238319fd3f09a0dfdeb960ecdfe4ba896cc32
+crc32=55c70e55
+entry=0xa0bb02e0
 first_load=0xa0300000
 tftp_address=0xa3000000
 ```
 
 Source artifact paths (integration worktree, kept reproducible):
 
-- `vmlinux-0de802777` (stripped, 13550412 bytes)
-- `vmlinux-0de802777-debug` (214028620 bytes, sha256
-  `5c239d657d78d29a675ecf9b1f443294bbb4251eb2d266543480c0a464cbb567`)
-- `initramfs-0de802777.cpio.gz` and `-repeat.cpio.gz` (sha256
-  `9d04051239456c0169ae72d535dd60e7d4b53a3a8e78af749c5c2726beb14854`,
-  reproducible=true)
+- `vmlinux-426629c84` (stripped, 13550412 bytes, sha256
+  `57423cb616358ee47822f99d67f238319fd3f09a0dfdeb960ecdfe4ba896cc32`, crc32
+  `55c70e55`)
+- `vmlinux-426629c84-debug` (214029944 bytes, sha256
+  `4616efcb3045a78e8129bf62aaca9a5eb7d63eb7cb19ac543bce466db7d87f99`)
+- `initramfs-426629c84.cpio.gz` and `-repeat.cpio.gz` (sha256
+  `0c18889c0e4f340cb754b49becdd8cecac6c2e9a1ba71752887016b74ddeb2c6`, crc32
+  `4899a0b9`, reproducible=true)
+
+PATH-BOUND QUALIFIER (from the manifest): the recorded hashes are bound to the
+build host compiler (`host_cc=/usr/bin/gcc`, sha256
+`6cb2d84ccd9fd3485d4e47ba032e626be65692601c38fad46866a6b565f3100f`) and the
+source-dir path of the verify-035 canonical clean build. A rebuild on a
+different host/source path is not expected to reproduce these hashes
+byte-for-byte.
+
+## Bitstream pairing (Opus finding B, unresolved)
+
+The USB Full-Speed host requires the Chiplab bitstream that includes the UE11
+controller and the UART/DMFE/confreg/NT35510/peripheral set. The only recorded
+on-board bitstream lineage is the desktop run set, whose `soc_top-ad6551-
+cpu40-uncore100-lcd-cs-h18.bit` (sha256 `4152FEAB85D893ACDE9B37004BE9E37DCF7
+1562A58E93DCDCFB85FE2CA33E39D`) PREDATES the bidirectional PS/2 patch. There
+is NO recorded bitstream containing the bidirectional PS/2 controller that was
+simulated in the CPU lane. Until a bitstream with the UE11 controller AND the
+bidirectional PS/2 controller is produced by the CPU lane
+(`nscscc-fpga-evaluate`) and recorded in
+`Documentation/nscscc/evidence/bitstream-sha256-*.txt`, this contract cannot
+claim full USB+PS/2 on-board proof. The kernel lane hands over vmlinux +
+initramfs and REQUESTS the paired bitstream from the CPU lane.
 
 ## U-Boot TFTP boot
 
@@ -58,14 +82,14 @@ setenv serverip 10.90.50.43
 setenv netmask 255.255.255.0
 setenv ethaddr 00:98:76:64:32:19
 ping 10.90.50.43
-tftpboot 0xa3000000 vmlinux-0de802777
+tftpboot 0xa3000000 vmlinux-426629c84
 crc32 0xa3000000 ${filesize}
 bootelf -p 0xa3000000 g console=ttyS0,115200 rdinit=/init loglevel=8
 ```
 
 Expected boot markers (serial, 115200 8N1):
 
-- Linux version banner with `0de802777` in `Kernel command line`
+- Linux version banner with `426629c84` in `Kernel command line`
 - `Memory: 128MiB available` region from the DTS
 - initramfs unpack + `Freeing initrd memory` then BusyBox `/init`
 - `/ #` prompt (login is root, no password)
@@ -98,10 +122,11 @@ it contains both PS/2 flags.
   device and move events.
 - Pull the receiver: expect `USB device disconnected` + root-hub disconnect
   status. Re-attach and repeat to prove re-enumeration.
-- Regression target (the guard): after a port-power off/suspend/stop cycle,
-  confirm no spurious `mod_timer`/recovery activity from a stale
-  `ue11h_timer` epoch, i.e. no unexpected USB writes to an unpowered/HALT
-  port after power-off.
+- Regression target (the serialized start): after a port-power off/suspend/
+  stop cycle, confirm `ue11h_start` re-arms under `ue11->lock` without
+  racing the recovery timer, i.e. no unexpected USB writes to an
+  unpowered/HALT port during re-enumeration and no lock-free concurrent
+  `port_power` access.
 
 ### PS/2 keyboard and mouse
 
@@ -125,7 +150,7 @@ Return evidence files into this repository's
 `tftp-linux-desktop-*-20260722.txt` naming pattern, and note which U-Boot
 CRC32 value the board reported.
 
-## Board lane status on 2026-07-31
+## Board lane status on 2026-08-01
 
 From the automation host, the board TFTP subnet (`10.90.50.43/44`) is not
 directly reachable: TCP 22/80 time out and UDP 69 (TFTP RRQ probe) gets no
@@ -135,7 +160,7 @@ host. The automation host's eth0 is up (172.24.224.206) and the fpga-agent
 SSH gateway (`10.20.213.157:22`) is reachable (OpenSSH for Windows 9.5) for
 the CPU lane's serialized `nscscc-fpga-evaluate` workflow; this Linux
 campaign has no direct board-subnet path. Until real board logs are
-returned, USB and PS/2 remain unfixed per audit advice
-`20260731T141815Z-5b0043f9`. The committed evidence set for this candidate
-is `c036cdb91` (initramfs x2 + manifest + this contract) on top of
-`0de802777`.
+returned, USB and PS/2 remain unfixed. This iteration's canonical clean
+build at committed HEAD is recorded in
+`Documentation/nscscc/evidence/vmlinux-426629c84.manifest`
+(verify-035, sha256 `57423cb6...`, crc32 `55c70e55`).
