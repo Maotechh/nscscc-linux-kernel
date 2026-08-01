@@ -22,6 +22,14 @@ below.
   `ue11h_start` lock and because the embedded initramfs `build-info` now
   records `KERNEL_SOURCE_COMMIT=426629c84`. The verify-034 working-tree build
   (`46cba84d...`) was a pre-commit artifact and is NOT the handoff artifact.
+- HEAD divergence note (checkpoint-037-040, Opus M2): the handoff triple is
+  bound to `426629c84`. Since then the kernel lane advanced to integration
+  HEAD `d00c32bb3`; the only kernel-source delta over that range is
+  `83f53d429` (behavior-neutral `WARN_ON(timer_pending(&ue11->timer))` in
+  `ue11h_start`, +8/-0, USB HCD compiled out of the QEMU lane). This does not
+  change the handoff artifacts: `vmlinux@426629c84` hash
+  `57423cb6...`/crc32 `55c70e55` and the embedded initramfs
+  `0c18889c...` remain the binding triple for the board run.
 
 ## Artifacts to transfer (the triple)
 
@@ -184,14 +192,24 @@ campaign will record a second wave, then PAUSE if none is satisfied.
    (`nscscc-fpga-evaluate`) owns this build. Record the `.bit` sha256 in
    `Documentation/nscscc/evidence/bitstream-sha256-*.txt` per that skill.
 3. **USB-only partial path (cheaper intermediate, does not wait for the
-   paired PS/2 bitstream):** the recorded desktop-run bitstream
-   `soc_top-ad6551-cpu40-uncore100-lcd-cs-h18.bit` (sha256 `4152FEAB...`)
-   already contains the UE11 USB Full-Speed controller. Running the triple
-   `{that bitstream, vmlinux@426629c84, initramfs}` and returning the serial
-   log with `lsusb` / `evtest` evidence of a Full-Speed device would prove
-   the USB HCD/HID path on hardware independently of PS/2. This satisfies the
-   escalation's USB half without the paired bitstream; PS/2 then remains the
-   sole outstanding board item, gated only on the paired bitstream.
+   paired PS/2 bitstream):** the recorded USB-capable bitstream is
+   `soc_top-ad6551-cpu40-uncore100.bit` (sha256
+   `5DF92D998E9528E90FBA3F1ED44EC47473CF0C869FB6C79CFDE75E0B13A2F2A0`,
+   `usb-hardware-20260722.manifest`: `feature_usb=true`, `usb_address=
+   0x1fe0c000`, `usb_soc_interrupt=6`, DRC 0, WNS +0.011456 ns) — the ONLY
+   recorded artifact containing the UE11 USB Full-Speed controller, and it
+   has NEVER been programmed to the board. CORRECTION (checkpoint-037-040,
+   Opus M1): the desktop-run `soc_top-ad6551-cpu40-uncore100-lcd-cs-h18.bit`
+   (sha256 `4152FEAB...`) does NOT contain the UE11 USB controller — its
+   manifest has no `feature_usb` and zero USB strings. Running the triple
+   `{soc_top-ad6551-cpu40-uncore100.bit 5df92d99..., vmlinux@426629c84,
+   initramfs}` and returning the serial log with `lsusb` / `evtest` evidence
+   of a Full-Speed device would prove the USB HCD/HID path on hardware
+   independently of PS/2. This satisfies the escalation's USB half without
+   the paired bitstream; PS/2 then remains the sole outstanding board item,
+   gated only on the paired bitstream. Note: that bitstream carries the
+   pre-0724 receive-only PS/2 (atkbd reset failure is the expected result
+   there), so the USB result is not confounded with the PS/2 result.
 
 PAUSE trigger: after two waves with neither a bitstream nor an operator
 response, the campaign pauses and waits for operator direction.

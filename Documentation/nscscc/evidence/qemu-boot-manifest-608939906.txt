@@ -4,13 +4,13 @@
 # First runtime kernel boot in the campaign on the official NSCSCC la32r QEMU.
 # This is a SOURCE-BOOT lane: it proves the committed kernel source + a
 # reduced initramfs boot to a BusyBox shell.  It does NOT exercise the board
-# peripheral stack (LCD, UE11 USB HCD, Altera PS/2 are disabled per
+# peripheral stack (LCD, UE11 USB HCD, Altera PS/2, DMFE MAC are disabled per
 # la32-qemu-boot.config-fragment).  Board USB/PS-2 evidence remains
 # operator-gated and NOT board-proven.
 
 # SCOPING (peripheral stack disabled for QEMU boot only)
 variant_config_fragment=Documentation/nscscc/evidence/la32-qemu-boot.config-fragment
-variant_disables=CHIPLAB_NT35510,USB_UE11_HCD,SERIO_ALTERA_PS2,KEYBOARD_ATKBD
+variant_disables=CHIPLAB_NT35510,USB_UE11_HCD,SERIO_ALTERA_PS2,KEYBOARD_ATKBD,DMFE_MAC
 board_peripherals_under_test=NO
 scope=source-derived kernel boot on reduced QEMU configuration (not board proof)
 
@@ -42,30 +42,44 @@ boot_result=Run /init as init process -> NSCSCC LoongArch32 Reduced Linux -> / #
 boot_lane_verdict=PASS (source-boot lane only)
 
 # Divergence notes
-# 1. QEMU boot used initramfs 9e5962b3... (pre-commit build-info); canonical
-#    handoff initramfs is 0c18889c... (kernel_commit=426629c84).  Difference
-#    is only the embedded KERNEL_SOURCE_COMMIT string; boot behavior
-#    unaffected.  Re-run with the canonical initramfs is a documented follow-up.
+# 1. [DISPROVEN by iteration 039, see note 4] QEMU boot used initramfs
+#    9e5962b3... (pre-commit build-info); canonical handoff initramfs is
+#    0c18889c... (kernel_commit=426629c84).  The pre-rerun hypothesis that the
+#    difference is only the embedded KERNEL_SOURCE_COMMIT string (boot behavior
+#    unaffected) was refuted: the canonical initramfs carries AUTO_NET=1 in
+#    /etc/nscscc/network.conf, which exercises the QEMU-unmodeled DMFE MAC and
+#    faults on boot.  The initramfs delta is LOAD-BEARING for this lane.
 # 2. kernel_commit 608939906 predates 426629c84 (ue11h_start lock).  The lock
 #    change is outside this boot lane's exercised code paths (USB HCD disabled
 #    for QEMU boot) and is separately evidenced at the source/binary level
 #    (vmlinux-426629c84.manifest).
 # 3. qemu variant config disables CONFIG_USB_UE11_HCD: QEMU ls3a5k32 does not
 #    model the UE11 controller, so the lock path is NOT exercised here.
-# 4. ITERATION-039 RE-RUN with the CANONICAL initramfs 0c18889c...:
-#    - vmlinux 917966aa... (608939906 + canonical initramfs, DMFE still on)
-#      faults in dmfe_open()/iowrite32 at `ip link set eth0 up`: canonical
-#      /etc/nscscc/network.conf has AUTO_NET=1, and QEMU ls3a5k32 does NOT
-#      model the DMFE Ethernet MAC.  No shell; "Kernel ade access[#1]" oops.
-#    - vmlinux b418021b... (same source + canonical initramfs + the iteration-
-#      039 config fragment with CONFIG_DMFE_MAC additionally disabled) boots
-#      to a / # shell; S40network prints the non-fatal "Network interface not
-#      found: eth0".  Embedded initramfs hash = canonical 0c18889c...
+# 4. ITERATION-039 RE-RUN with the CANONICAL initramfs 0c18889c...  KERNEL
+#    IDENTITY CORRECTION (checkpoint-037-040): the re-run was built from the
+#    integration checkout at commit 83f53d429, NOT 608939906.  Baked UTS in
+#    both boot logs and include/generated/utsrelease.h:
+#    5.14.0-rc2-g83f53d4299ca.
+#    - First re-run (commit 83f53d429 + canonical initramfs, DMFE still on):
+#      faults in dmfe_open()/iowrite32 at `ip link set eth0 up` because the
+#      canonical /etc/nscscc/network.conf has AUTO_NET=1 and QEMU ls3a5k32
+#      does NOT model the DMFE Ethernet MAC.  No shell; "Kernel ade access[#1]"
+#      oops.  Log: /tmp/opencode/la32r-qemu/boot-canon-initramfs.log (sha256
+#      fa99ad93d2494d2d227cb8b41dda402b31eb8801dc5eff652bdd7de398b9e2a7).
+#    - Second re-run (commit 83f53d429 + canonical initramfs + the iteration-
+#      039 config fragment with CONFIG_DMFE_MAC additionally disabled):
+#      vmlinux b418021b291bdb2800da13ecbd0123eac75bcd989be0a7a247ffcbc4aec1a655
+#      (212814488 B, config sha256 e0b50bb4...) boots to a / # shell;
+#      S40network prints the non-fatal "Network interface not found: eth0".
+#      Embedded initramfs hash = canonical 0c18889c...  Log:
+#      /tmp/opencode/la32r-qemu/boot-canon-dmfe-off.log (sha256
+#      c463c9a14d021ef01da8b16e098608df916bd613c34294a1c5e6a373619bea09).
 #    => The initramfs delta is LOAD-BEARING for the QEMU lane only in that
 #       AUTO_NET=1 exercises the QEMU-unmodeled DMFE MAC; DMFE is board-
 #       proven and is disabled for QEMU boot only (same rationale as the other
 #       four disables).  The 039 canonical re-run evidence is host-local
-#       (boot-canon-dmfe-off.log) and reproducible from the fragment.
+#       (boot-canon-initramfs.log / boot-canon-dmfe-off.log) and reproducible
+#       from the fragment + manifest at commit 83f53d429.
 
 # Follow-ups (deferred process items, checkpoint-033-036)
 # - [DONE, iteration 039] Re-run QEMU boot with canonical initramfs
