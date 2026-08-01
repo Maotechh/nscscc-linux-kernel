@@ -200,7 +200,7 @@ campaign will record a second wave, then PAUSE if none is satisfied.
 1. **Board execution of the triple** `{bitstream, vmlinux@426629c84,
    initramfs}`. **RE-SCOPED (checkpoint-045-048): this candidate carries the
    known `7407da63a` USB-enumeration regression (see banner above), so this
-   ask is a serial-shell / PS-2 proof only** — boot to `/ #`, capture
+   ask is a    serial-shell / PS-2 proof only** — boot to `/ #`, capture
    `/proc/cmdline`, and capture the PS/2 checks below. Do not expect USB
    enumeration on this candidate. Either run the U-Boot TFTP boot above from
    the Windows desktop (Tftpd32 root `10.90.50.43`, board `10.90.50.44`) and
@@ -208,7 +208,8 @@ campaign will record a second wave, then PAUSE if none is satisfied.
    jump-host / credential path through the reachable fpga-agent SSH gateway
    (`10.20.213.157:22`, OpenSSH for Windows 9.5) so this host can reach the
    board subnet itself. The USB enumeration proof moves to the refreshed
-   candidate containing `6832b1aa4` (rebuild in progress).
+   candidate `vmlinux-0cf30051c` (checkpoint-045-048 rebuild complete;
+   artifact + manifest under `.omo/verify-035/artifacts/`).
 2. **Paired bitstream** containing the UE11 USB Full-Speed host AND the
    bidirectional PS/2 controller (`chiplab-usb-full-speed-20260722.patch` +
    `chiplab-ps2-bidirectional-20260724.patch` over the pinned base). No
