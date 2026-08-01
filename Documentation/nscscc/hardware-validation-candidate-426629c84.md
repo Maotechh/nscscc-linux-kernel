@@ -164,3 +164,25 @@ returned, USB and PS/2 remain unfixed. This iteration's canonical clean
 build at committed HEAD is recorded in
 `Documentation/nscscc/evidence/vmlinux-426629c84.manifest`
 (verify-035, sha256 `57423cb6...`, crc32 `55c70e55`).
+
+## Operator action requested — escalation wave 1 of 2 (2026-08-01T03:10:21Z)
+
+This contract is the single operator-facing handoff. Two asks are open; the
+campaign will record a second wave, then PAUSE if neither is satisfied.
+
+1. **Board execution of the triple** `{bitstream, vmlinux@426629c84,
+   initramfs}`. Either run the U-Boot TFTP boot above from the Windows
+   desktop (Tftpd32 root `10.90.50.43`, board `10.90.50.44`) and return the
+   serial log into `Documentation/nscscc/evidence/`, or provide a jump-host /
+   credential path through the reachable fpga-agent SSH gateway
+   (`10.20.213.157:22`, OpenSSH for Windows 9.5) so this host can reach the
+   board subnet itself.
+2. **Paired bitstream** containing the UE11 USB Full-Speed host AND the
+   bidirectional PS/2 controller (`chiplab-usb-full-speed-20260722.patch` +
+   `chiplab-ps2-bidirectional-20260724.patch` over the pinned base). No
+   recorded `.bit` contains both; the CPU lane's Vivado 2023.2 funnel
+   (`nscscc-fpga-evaluate`) owns this build. Record the `.bit` sha256 in
+   `Documentation/nscscc/evidence/bitstream-sha256-*.txt` per that skill.
+
+PAUSE trigger: after two waves with neither a bitstream nor an operator
+response, the campaign pauses and waits for operator direction.
