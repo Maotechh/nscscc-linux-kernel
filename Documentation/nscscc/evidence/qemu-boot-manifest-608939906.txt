@@ -52,8 +52,24 @@ boot_lane_verdict=PASS (source-boot lane only)
 #    (vmlinux-426629c84.manifest).
 # 3. qemu variant config disables CONFIG_USB_UE11_HCD: QEMU ls3a5k32 does not
 #    model the UE11 controller, so the lock path is NOT exercised here.
+# 4. ITERATION-039 RE-RUN with the CANONICAL initramfs 0c18889c...:
+#    - vmlinux 917966aa... (608939906 + canonical initramfs, DMFE still on)
+#      faults in dmfe_open()/iowrite32 at `ip link set eth0 up`: canonical
+#      /etc/nscscc/network.conf has AUTO_NET=1, and QEMU ls3a5k32 does NOT
+#      model the DMFE Ethernet MAC.  No shell; "Kernel ade access[#1]" oops.
+#    - vmlinux b418021b... (same source + canonical initramfs + the iteration-
+#      039 config fragment with CONFIG_DMFE_MAC additionally disabled) boots
+#      to a / # shell; S40network prints the non-fatal "Network interface not
+#      found: eth0".  Embedded initramfs hash = canonical 0c18889c...
+#    => The initramfs delta is LOAD-BEARING for the QEMU lane only in that
+#       AUTO_NET=1 exercises the QEMU-unmodeled DMFE MAC; DMFE is board-
+#       proven and is disabled for QEMU boot only (same rationale as the other
+#       four disables).  The 039 canonical re-run evidence is host-local
+#       (boot-canon-dmfe-off.log) and reproducible from the fragment.
 
 # Follow-ups (deferred process items, checkpoint-033-036)
-# - Re-run QEMU boot with canonical initramfs 0c18889c... and record hashes.
+# - [DONE, iteration 039] Re-run QEMU boot with canonical initramfs
+#   0c18889c... and record hashes: canonical boot to / # shell achieved with
+#   the iteration-039 fragment (adds CONFIG_DMFE_MAC disable).
 # - Consider committing the wrapper script + boot log to a campaign evidence
 #   store if the lane needs to survive host reboot independently of /tmp.
