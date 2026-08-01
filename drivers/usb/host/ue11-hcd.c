@@ -991,10 +991,21 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
     if (((ep->nextpid == USB_PID_IN) || (ep->nextpid == USB_PID_ACK)) && 
         (response == USB_PID_DATA0 || response == USB_PID_DATA1))
     {
-		int expected = usb_gettoggle(urb->dev,
-				usb_pipeendpoint(urb->pipe),
-				usb_pipeout(urb->pipe));
 		int received = (response == USB_PID_DATA1);
+		int expected;
+
+		/*
+		 * The control status stage always uses DATA1 regardless of
+		 * the data-stage toggle, and its direction is opposite the
+		 * URB's data direction, so the pipe-keyed toggle slot is not
+		 * a valid reference here (USB 2.0 spec 8.5.3).
+		 */
+		if (ep->nextpid == USB_PID_ACK)
+			expected = 1;
+		else
+			expected = usb_gettoggle(urb->dev,
+					usb_pipeendpoint(urb->pipe),
+					usb_pipeout(urb->pipe));
 
 		if (expected == received)
 			response = USB_PID_ACK;
