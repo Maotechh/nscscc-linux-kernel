@@ -10,14 +10,16 @@
 > Candidate `426629c84` is an ancestor of `7407da63a` and does **not**
 > contain `6832b1aa4` (verified by `git merge-base --is-ancestor`).
 >
-> **Do not spend a board run on this triple expecting USB to work.** Until a
-> rebuilt `vmlinux` containing `6832b1aa4` is released (artifacts pending
-> refresh), treat **ask #1 as a serial-shell / PS-2 proof only** — boot the
-> triple, confirm the `/ #` shell, capture `/proc/cmdline`, and run the PS/2
-> checks. Any `lsusb` / `evtest` / USB-enumeration expectation on this
-> candidate is void, and a USB failure here must be attributed to the known
-> stale kernel bytes, NOT to the RTL or bitstream. The USB proof is deferred
-> to the refreshed candidate containing `6832b1aa4`.
+> **Do not spend a board run on this triple expecting USB to work.** A rebuilt
+> `vmlinux` containing `6832b1aa4` is released:
+> [`hardware-validation-candidate-0cf30051c.md`](hardware-validation-candidate-0cf30051c.md)
+> is now the operator-facing contract for the USB proof. Treat **ask #1 on
+> this candidate as a serial-shell / PS-2 proof only** — boot the triple,
+> confirm the `/ #` shell, capture `/proc/cmdline`, and run the PS/2 checks.
+> Any `lsusb` / `evtest` / USB-enumeration expectation on this candidate is
+> void, and a USB failure here must be attributed to the known stale kernel
+> bytes, NOT to the RTL or bitstream. The USB proof is deferred to the
+> refreshed candidate `0cf30051c` (see its contract).
 
 This document is the single handoff contract for evaluating kernel candidate
 commit `426629c84` on the NSCSCC 实验箱. It supersedes
