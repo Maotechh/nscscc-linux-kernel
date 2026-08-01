@@ -141,10 +141,14 @@ URB's data direction.
   stage direction equals the URB direction.
 - Control status stage (`ep->nextpid == USB_PID_ACK`): expected PID is
   hard-wired to DATA1. Using the pipe-keyed toggle here reads the data-stage
-  slot, which for a control write ends at DATA0 after an odd number of data
-  packets and falsely rejects the DATA1 status (`-EPROTO` after three
-  retries). Commit `6832b1aa4` fixed this; the behavior was introduced by
-  the DATAx verification in `7407da63a`.
+  slot, which for a control write is not guaranteed to be 1 at the status
+  stage: after an odd number of data packets the OUT slot ends at DATA0, and
+  a zero-length (ZLP) control write (SET_ADDRESS, SET_CONFIGURATION) skips
+  the force-to-1 data-stage path entirely, leaving the OUT slot at its 0
+  initialization. Either way the always-DATA1 status is falsely rejected
+  (`-EPROTO` after three retries); because SET_ADDRESS is a ZLP control
+  write, this is enumeration-fatal. Commit `6832b1aa4` fixed this; the
+  behavior was introduced by the DATAx verification in `7407da63a`.
 - `status_packet()` always transmits DATA1 for both the IN and OUT status
   forms, and the SETUP ACK path force-sets the control toggles to 1, so the
   data stage always begins with DATA1 as the spec requires.

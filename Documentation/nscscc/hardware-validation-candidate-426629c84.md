@@ -1,5 +1,24 @@
 # Board Handoff Contract: candidate `426629c84`
 
+> ## ⚠ KNOWN DEFECT IN THIS CANDIDATE (added 2026-08-01, checkpoint-045-048)
+>
+> **USB enumeration is guaranteed to fail on `vmlinux@426629c84`.** The
+> regression `7407da63a` made the HCD reject the always-DATA1 control
+> status stage against the pipe-keyed data toggle; because `SET_ADDRESS` is
+> itself a zero-length (ZLP) control write whose OUT toggle slot stays 0, no
+> USB device could enumerate between `7407da63a` and the fix `6832b1aa4`.
+> Candidate `426629c84` is an ancestor of `7407da63a` and does **not**
+> contain `6832b1aa4` (verified by `git merge-base --is-ancestor`).
+>
+> **Do not spend a board run on this triple expecting USB to work.** Until a
+> rebuilt `vmlinux` containing `6832b1aa4` is released (artifacts pending
+> refresh), treat **ask #1 as a serial-shell / PS-2 proof only** — boot the
+> triple, confirm the `/ #` shell, capture `/proc/cmdline`, and run the PS/2
+> checks. Any `lsusb` / `evtest` / USB-enumeration expectation on this
+> candidate is void, and a USB failure here must be attributed to the known
+> stale kernel bytes, NOT to the RTL or bitstream. The USB proof is deferred
+> to the refreshed candidate containing `6832b1aa4`.
+
 This document is the single handoff contract for evaluating kernel candidate
 commit `426629c84` on the NSCSCC 实验箱. It supersedes
 `hardware-validation-candidate-0de802777.md` (and in turn
@@ -179,12 +198,17 @@ This contract is the single operator-facing handoff. Three asks are open; the
 campaign will record a second wave, then PAUSE if none is satisfied.
 
 1. **Board execution of the triple** `{bitstream, vmlinux@426629c84,
-   initramfs}`. Either run the U-Boot TFTP boot above from the Windows
-   desktop (Tftpd32 root `10.90.50.43`, board `10.90.50.44`) and return the
-   serial log into `Documentation/nscscc/evidence/`, or provide a jump-host /
-   credential path through the reachable fpga-agent SSH gateway
+   initramfs}`. **RE-SCOPED (checkpoint-045-048): this candidate carries the
+   known `7407da63a` USB-enumeration regression (see banner above), so this
+   ask is a serial-shell / PS-2 proof only** — boot to `/ #`, capture
+   `/proc/cmdline`, and capture the PS/2 checks below. Do not expect USB
+   enumeration on this candidate. Either run the U-Boot TFTP boot above from
+   the Windows desktop (Tftpd32 root `10.90.50.43`, board `10.90.50.44`) and
+   return the serial log into `Documentation/nscscc/evidence/`, or provide a
+   jump-host / credential path through the reachable fpga-agent SSH gateway
    (`10.20.213.157:22`, OpenSSH for Windows 9.5) so this host can reach the
-   board subnet itself.
+   board subnet itself. The USB enumeration proof moves to the refreshed
+   candidate containing `6832b1aa4` (rebuild in progress).
 2. **Paired bitstream** containing the UE11 USB Full-Speed host AND the
    bidirectional PS/2 controller (`chiplab-usb-full-speed-20260722.patch` +
    `chiplab-ps2-bidirectional-20260724.patch` over the pinned base). No
