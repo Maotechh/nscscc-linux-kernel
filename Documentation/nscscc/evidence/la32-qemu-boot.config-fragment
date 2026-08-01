@@ -45,8 +45,11 @@
 # kernel source root: give merge_config the absolute path to the committed file
 # (the fragment below records the committed-relative path as the canonical
 # identity, and the build substitutes the srctree root).  This makes the lane
-# reproducible from the git tree: the only external inputs are the toolchain and
-# the official NSCSCC la32r QEMU wrapper (see qemu-boot-manifest-608939906.txt).
+# reproducible from the git tree, subject to the host-local external inputs
+# enumerated in qemu-boot-manifest-608939906.txt note 6: the LoongArch32
+# toolchain, the official NSCSCC la32r QEMU binary + noble rootfs loader
+# (/nscscc-noble-rootfs), the extracted noble/jammy library closure in $SCR/libs,
+# the libcapstone4-extracted lib dir, and rootfs libs.
 
 # SoC peripherals not modeled by QEMU ls3a5k32 -> disable
 # CONFIG_CHIPLAB_NT35510 is not set
