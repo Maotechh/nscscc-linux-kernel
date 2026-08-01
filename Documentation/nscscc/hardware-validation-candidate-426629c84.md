@@ -167,8 +167,8 @@ build at committed HEAD is recorded in
 
 ## Operator action requested — escalation wave 1 of 2 (2026-08-01T03:10:21Z)
 
-This contract is the single operator-facing handoff. Two asks are open; the
-campaign will record a second wave, then PAUSE if neither is satisfied.
+This contract is the single operator-facing handoff. Three asks are open; the
+campaign will record a second wave, then PAUSE if none is satisfied.
 
 1. **Board execution of the triple** `{bitstream, vmlinux@426629c84,
    initramfs}`. Either run the U-Boot TFTP boot above from the Windows
@@ -183,6 +183,15 @@ campaign will record a second wave, then PAUSE if neither is satisfied.
    recorded `.bit` contains both; the CPU lane's Vivado 2023.2 funnel
    (`nscscc-fpga-evaluate`) owns this build. Record the `.bit` sha256 in
    `Documentation/nscscc/evidence/bitstream-sha256-*.txt` per that skill.
+3. **USB-only partial path (cheaper intermediate, does not wait for the
+   paired PS/2 bitstream):** the recorded desktop-run bitstream
+   `soc_top-ad6551-cpu40-uncore100-lcd-cs-h18.bit` (sha256 `4152FEAB...`)
+   already contains the UE11 USB Full-Speed controller. Running the triple
+   `{that bitstream, vmlinux@426629c84, initramfs}` and returning the serial
+   log with `lsusb` / `evtest` evidence of a Full-Speed device would prove
+   the USB HCD/HID path on hardware independently of PS/2. This satisfies the
+   escalation's USB half without the paired bitstream; PS/2 then remains the
+   sole outstanding board item, gated only on the paired bitstream.
 
 PAUSE trigger: after two waves with neither a bitstream nor an operator
 response, the campaign pauses and waits for operator direction.
