@@ -18,7 +18,7 @@ scope=source-derived kernel boot on reduced QEMU configuration (not board proof)
 qemu_machine=ls3a5k32 (official NSCSCC la32r QEMU, serial 0x1fe001e0, 128MB)
 qemu_binary=/nscscc-noble-rootfs/opt/chiplab-tools/root/la32r-QEMU-x86_64-ubuntu-22.04/qemu-system-loongarch32
 qemu_version=6.2.50 (vendor NSCSCC la32r build, via noble rootfs loader)
-wrapper_script=/tmp/opencode/la32r-qemu/run-qemu32.sh (host-local, not committed)
+wrapper_script=Documentation/nscscc/evidence/run-qemu32.sh (COMMITTED, see note 6)
 
 # Kernel / initramfs identity (iteration 033 build)
 kernel_commit=608939906
@@ -106,16 +106,25 @@ boot_lane_verdict=PASS (source-boot lane only)
 # 6. ITERATION-044 LANE DURABILITY: the QEMU lane wrapper and the head boot
 #    log are now COMMITTED (survive host reboot independently of /tmp).
 #    - Documentation/nscscc/evidence/run-qemu32.sh (sha256
-#      becabd6de227f8591b6e1b10d2989661e239ea002ad0d440763a7af7f3ed81fd):
+#      5dd36ccc3ac0cdfc9850dcd2674aad6be9b9d63f68183d6b4dae96cbde97c606):
 #      runs the official NSCSCC la32r QEMU via the noble rootfs loader.
-#      The QEMU binary + noble rootfs remain host-local external inputs.
+#      External inputs that remain host-local: the QEMU binary + noble rootfs
+#      (/nscscc-noble-rootfs/.../qemu-system-loongarch32 and loader), the
+#      extracted noble/jammy library closure in $SCR/libs, the
+#      libcapstone4-extracted lib dir, and rootfs libs (see script header).
 #    - Documentation/nscscc/evidence/qemu-boot-8ab8d04dd.log: the iteration-042
 #      final boot log (sha256 c729fdd3a38db69b7a28234c0473c9580f1cc390a820567aeb65a63e5e4691d3),
 #      / # shell reached, UTS 5.14.0-rc2-g8ab8d04ddf3d.
-#    - Verified re-run at iteration 044 with the COMMITTED wrapper against the
-#      committed-head kernel kbuild-qemu-042/vmlinux (645987f5...): / # shell
-#      reached again (boot-044-verify.log sha256
-#      0083e5e8cdda40abc123364e0cbc6353d846d9c573e43a9ec3907f31e8b3f0a4).
+#    - CORRECTION (iteration 045, Sol REJECT at checkpoint-041-044): the
+#      receipt-044 wrapper hash becabd6de... matched neither the committed
+#      wrapper (5dd36ccc...) nor the host-local wrapper (cb623573...); the
+#      earlier boot-044-verify.log (0083e5e8...) was produced by the /tmp
+#      wrapper, not the committed bytes.  Re-ran the exact committed wrapper
+#      (git show HEAD:...run-qemu32.sh) against the committed-head kernel
+#      kbuild-qemu-042/vmlinux (645987f5...) + embedded initramfs
+#      (0c18889c...): / # shell reached again, UTS 5.14.0-rc2-g8ab8d04ddf3d.
+#      Bound re-run log committed: qemu-boot-8ab8d04dd.verify-committed-wrapper.log
+#      (sha256 7a5547bf2f37cb53419dbbbae5eb9a44f9770a47c8eae2e5218a0f1659117c18).
 #    Usage: ./run-qemu32.sh -kernel <O>/vmlinux -initrd <O>/usr/initramfs_inc_data
 #           -nographic -m 128M -M ls3a5k32
 
