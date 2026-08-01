@@ -1,0 +1,43 @@
+# QEMU-boot variant config fragment (relative to la32_defconfig)
+#
+# Purpose (iteration 033): boot the committed kernel source on the official
+# NSCSCC la32r QEMU (ls3a5k32, 128MB).  The QEMU machine does not model the
+# SoC's NT35510 LCD, the UE11 USB host controller, or the Altera PS/2 serio
+# device, so those peripherals are disabled to reach a stable BusyBox shell.
+#
+# This fragment DISABLES hardware peripherals for the QEMU boot lane ONLY.
+# It is NOT a board configuration and proves committed kernel source boots,
+# not board peripheral function.  Board evidence requires the real handoff
+# triple (see hardware-validation-candidate-426629c84.md).
+#
+# Apply on top of la32_defconfig:
+#   make ARCH=loongarch la32_defconfig
+#   scripts/kconfig/merge_config.sh -m arch/loongarch/configs/la32_defconfig \
+#     <this fragment>
+#   make ARCH=loongarch olddefconfig
+#
+# SEMANTIC CLAIM: applying this fragment disables exactly the four peripherals
+# below and points the embedded initramfs at the boot cpio.  It reproduces the
+# iteration-033 variant INTENT.  It is NOT a byte-exact .config reproducer:
+# the recorded iteration-033 .config sha256 (84c28cd...) additionally embeds
+# toolchain/build-info lines (CC_VERSION_TEXT, LOCALVERSION_AUTO,
+# AUDIT/TASKSTATS/CGROUP/RD_* toggles) that came from the original build flow.
+# The four peripheral disables below are the load-bearing variant semantics
+# and match the original build's .config exactly (verified by merge + diff).
+#
+# Original iteration-033 build .config sha256:
+#   84c28cd81abf7f5662ad9a2efe70a64da915e37edcf5a45947247477c67a7a9c
+
+# SoC peripherals not modeled by QEMU ls3a5k32 -> disable
+# CONFIG_CHIPLAB_NT35510 is not set
+# CONFIG_USB_UE11_HCD is not set
+# CONFIG_SERIO_ALTERA_PS2 is not set
+
+# PS/2 keyboard/atkbd has no serio source without SERIO_ALTERA_PS2
+# CONFIG_KEYBOARD_ATKBD is not set
+
+# Embedded initramfs for the boot lane (reproducible cpio.gz)
+CONFIG_INITRAMFS_SOURCE="/tmp/opencode/la32r-qemu/initramfs-qemu.cpio.gz"
+CONFIG_INITRAMFS_COMPRESSION_GZIP=y
+# CONFIG_INITRAMFS_COMPRESSION_BZIP2 is not set
+# CONFIG_INITRAMFS_COMPRESSION_NONE is not set

@@ -1,0 +1,59 @@
+# QEMU boot lane manifest (iteration 033, commit 608939906)
+
+# PURPOSE
+# First runtime kernel boot in the campaign on the official NSCSCC la32r QEMU.
+# This is a SOURCE-BOOT lane: it proves the committed kernel source + a
+# reduced initramfs boot to a BusyBox shell.  It does NOT exercise the board
+# peripheral stack (LCD, UE11 USB HCD, Altera PS/2 are disabled per
+# la32-qemu-boot.config-fragment).  Board USB/PS-2 evidence remains
+# operator-gated and NOT board-proven.
+
+# SCOPING (peripheral stack disabled for QEMU boot only)
+variant_config_fragment=Documentation/nscscc/evidence/la32-qemu-boot.config-fragment
+variant_disables=CHIPLAB_NT35510,USB_UE11_HCD,SERIO_ALTERA_PS2,KEYBOARD_ATKBD
+board_peripherals_under_test=NO
+scope=source-derived kernel boot on reduced QEMU configuration (not board proof)
+
+# QEMU
+qemu_machine=ls3a5k32 (official NSCSCC la32r QEMU, serial 0x1fe001e0, 128MB)
+qemu_binary=/nscscc-noble-rootfs/opt/chiplab-tools/root/la32r-QEMU-x86_64-ubuntu-22.04/qemu-system-loongarch32
+qemu_version=6.2.50 (vendor NSCSCC la32r build, via noble rootfs loader)
+wrapper_script=/tmp/opencode/la32r-qemu/run-qemu32.sh (host-local, not committed)
+
+# Kernel / initramfs identity (iteration 033 build)
+kernel_commit=608939906
+kernel_version_string=5.14.0-rc2-g608939906208
+kernel_version_sha256=917966aa039575060038b52de0a3c79bb5aadf425fbe1a98897692602a98b6aa
+kernel_size=212994664
+kernel_crc32=91a9bb3e
+config_sha256=84c28cd81abf7f5662ad9a2efe70a64da915e37edcf5a45947247477c67a7a9c
+initramfs=/tmp/opencode/la32r-qemu/initramfs-qemu.cpio.gz (host-local, not committed)
+initramfs_sha256=9e5962b39ff4d23d0a482835c04b8812b3aa430fb24c24d8b1465ee33ee9acfd
+
+# Boot evidence (host-local logs, not committed)
+# NOTE: these logs are referenced but not committed to the git tree; the lane
+# is reproducible from the fragment + this manifest by rebuilding the kernel
+# at kernel_commit with the fragment applied and booting via the wrapper.
+# Known delta: the booted initramfs predates the canonical handoff initramfs
+# (0c18889c...) by only the embedded KERNEL_SOURCE_COMMIT build-info string.
+boot_log_final_sha256=10f604c29e49f24ea3c333c7ed2e44e0dc5a100216c51701cd36fa2407f9f83a
+boot_log_variant_sha256=f0697aa08c520265df56606cfa3ed557c1ee1b9fbd8783a46f74eaa642faa65b
+boot_result=Run /init as init process -> NSCSCC LoongArch32 Reduced Linux -> / # shell
+boot_lane_verdict=PASS (source-boot lane only)
+
+# Divergence notes
+# 1. QEMU boot used initramfs 9e5962b3... (pre-commit build-info); canonical
+#    handoff initramfs is 0c18889c... (kernel_commit=426629c84).  Difference
+#    is only the embedded KERNEL_SOURCE_COMMIT string; boot behavior
+#    unaffected.  Re-run with the canonical initramfs is a documented follow-up.
+# 2. kernel_commit 608939906 predates 426629c84 (ue11h_start lock).  The lock
+#    change is outside this boot lane's exercised code paths (USB HCD disabled
+#    for QEMU boot) and is separately evidenced at the source/binary level
+#    (vmlinux-426629c84.manifest).
+# 3. qemu variant config disables CONFIG_USB_UE11_HCD: QEMU ls3a5k32 does not
+#    model the UE11 controller, so the lock path is NOT exercised here.
+
+# Follow-ups (deferred process items, checkpoint-033-036)
+# - Re-run QEMU boot with canonical initramfs 0c18889c... and record hashes.
+# - Consider committing the wrapper script + boot log to a campaign evidence
+#   store if the lane needs to survive host reboot independently of /tmp.
