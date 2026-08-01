@@ -213,3 +213,26 @@ campaign will record a second wave, then PAUSE if none is satisfied.
 
 PAUSE trigger: after two waves with neither a bitstream nor an operator
 response, the campaign pauses and waits for operator direction.
+
+## Delivery-evidence guard (iteration 046, closes checkpoint-037-040 / DS
+## checkpoint-041-044 #1)
+
+Only a DELIVERED wave counts toward the two-wave PAUSE trigger. "Delivered"
+means this host recorded an `escalation_wave_delivered` event in
+`events.jsonl` with a delivery timestamp when the wave was written to the
+operator-facing contract (not merely when the campaign asked itself).
+
+- Each wave increments the count only after `escalation_wave_delivered` is
+  recorded with `at`, `wave` (1 or 2), `ask_count`, and `reply_window_expires_at`.
+- Reply window: the operator has until `reply_window_expires_at` (set at
+  delivery, default 72h from delivery timestamp) to satisfy or decline any
+  ask. An undelivered or unacknowledged wave does not advance the PAUSE count.
+- The campaign does not PAUSE on its own filing cabinet: if the two recorded
+  waves are undelivered (no delivery events), the escalation is re-sent (new
+  delivery timestamp) instead of pausing.
+- A new escalation (fresh wave numbering) is opened if the operator changes
+  the asks or the contract content; prior delivered waves still count unless
+  explicitly reset in the same event stream.
+- Operator responses are recorded as `escalation_wave_satisfied` (with the
+  satisfied ask id and returned evidence path) or `escalation_declined`; a
+  satisfied or declined ask reduces the open-ask count and is not re-sent.
