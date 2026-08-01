@@ -103,11 +103,27 @@ boot_lane_verdict=PASS (source-boot lane only)
 #       wrapper are the only external inputs.  Still a source-boot lane; board
 #       peripherals remain operator-gated.
 
+# 6. ITERATION-044 LANE DURABILITY: the QEMU lane wrapper and the head boot
+#    log are now COMMITTED (survive host reboot independently of /tmp).
+#    - Documentation/nscscc/evidence/run-qemu32.sh (sha256
+#      becabd6de227f8591b6e1b10d2989661e239ea002ad0d440763a7af7f3ed81fd):
+#      runs the official NSCSCC la32r QEMU via the noble rootfs loader.
+#      The QEMU binary + noble rootfs remain host-local external inputs.
+#    - Documentation/nscscc/evidence/qemu-boot-8ab8d04dd.log: the iteration-042
+#      final boot log (sha256 c729fdd3a38db69b7a28234c0473c9580f1cc390a820567aeb65a63e5e4691d3),
+#      / # shell reached, UTS 5.14.0-rc2-g8ab8d04ddf3d.
+#    - Verified re-run at iteration 044 with the COMMITTED wrapper against the
+#      committed-head kernel kbuild-qemu-042/vmlinux (645987f5...): / # shell
+#      reached again (boot-044-verify.log sha256
+#      0083e5e8cdda40abc123364e0cbc6353d846d9c573e43a9ec3907f31e8b3f0a4).
+#    Usage: ./run-qemu32.sh -kernel <O>/vmlinux -initrd <O>/usr/initramfs_inc_data
+#           -nographic -m 128M -M ls3a5k32
+
 # Follow-ups (deferred process items, checkpoint-033-036)
 # - [DONE, iteration 039] Re-run QEMU boot with canonical initramfs
 #   0c18889c... and record hashes: canonical boot to / # shell achieved with
 #   the iteration-039 fragment (adds CONFIG_DMFE_MAC disable).
 # - [DONE, iteration 042] Commit the initramfs reference so the lane no longer
 #   depends on a host-local /tmp artifact (fragment + re-run evidence).
-# - Consider committing the wrapper script + boot log to a campaign evidence
-#   store if the lane needs to survive host reboot independently of /tmp.
+# - [DONE, iteration 044] Commit the QEMU lane wrapper script + head boot log
+#   so the lane survives host reboot independently of /tmp.
