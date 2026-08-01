@@ -128,6 +128,29 @@ The Chiplab changes stay in a system-integration worktree. Only the kernel
 source, desktop configuration, validation scripts, and evidence are published
 in this repository. No CPU implementation or Linux UAPI changes are required.
 
+## Control transfer DATAx toggle semantics
+
+The HCD verifies the received DATAx PID for IN and control-status
+transactions in `ue11h_process_transfer_result()`. The USB 2.0 spec (8.5.3)
+requires the control status stage to always use DATA1 regardless of the
+data-stage toggle parity, and the status stage direction is opposite the
+URB's data direction.
+
+- Data-stage IN (`ep->nextpid == USB_PID_IN`): expected PID is the
+  pipe-keyed toggle (`usb_gettoggle`). This is correct because the data
+  stage direction equals the URB direction.
+- Control status stage (`ep->nextpid == USB_PID_ACK`): expected PID is
+  hard-wired to DATA1. Using the pipe-keyed toggle here reads the data-stage
+  slot, which for a control write ends at DATA0 after an odd number of data
+  packets and falsely rejects the DATA1 status (`-EPROTO` after three
+  retries). Commit `6832b1aa4` fixed this; the behavior was introduced by
+  the DATAx verification in `7407da63a`.
+- `status_packet()` always transmits DATA1 for both the IN and OUT status
+  forms, and the SETUP ACK path force-sets the control toggles to 1, so the
+  data stage always begins with DATA1 as the spec requires.
+
+A bogus status-stage DATA0 is still rejected (expected DATA1).
+
 ## Current limitations
 
 The controller is a single-port Full-Speed host. The PHY can identify a
