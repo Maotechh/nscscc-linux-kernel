@@ -36,6 +36,17 @@
 # faults (iowrite32 address error) unless CONFIG_DMFE_MAC is also disabled.
 # With this fifth disable the canonical initramfs boots to a / # shell
 # ("Network interface not found: eth0" is the non-fatal expected message).
+#
+# Iteration-042 update (DS checkpoint-037-040 portability finding): the boot
+# lane now embeds the COMMITTED canonical initramfs
+# (Documentation/nscscc/evidence/initramfs-426629c84.cpio.gz, sha256
+# 0c18889c0e4f340cb754b49becdd8cecac6c2e9a1ba71752887016b74ddeb2c6) instead of
+# a host-local /tmp artifact.  CONFIG_INITRAMFS_SOURCE must resolve to the
+# kernel source root: give merge_config the absolute path to the committed file
+# (the fragment below records the committed-relative path as the canonical
+# identity, and the build substitutes the srctree root).  This makes the lane
+# reproducible from the git tree: the only external inputs are the toolchain and
+# the official NSCSCC la32r QEMU wrapper (see qemu-boot-manifest-608939906.txt).
 
 # SoC peripherals not modeled by QEMU ls3a5k32 -> disable
 # CONFIG_CHIPLAB_NT35510 is not set
@@ -46,8 +57,10 @@
 # PS/2 keyboard/atkbd has no serio source without SERIO_ALTERA_PS2
 # CONFIG_KEYBOARD_ATKBD is not set
 
-# Embedded initramfs for the boot lane (reproducible cpio.gz)
-CONFIG_INITRAMFS_SOURCE="/tmp/opencode/la32r-qemu/initramfs-qemu.cpio.gz"
+# Embedded initramfs for the boot lane (committed canonical cpio.gz)
+# CONFIG_INITRAMFS_SOURCE is substituted with the srctree-rooted absolute path
+# to the committed file below at build time (see iteration-042 note above).
+CONFIG_INITRAMFS_SOURCE="Documentation/nscscc/evidence/initramfs-426629c84.cpio.gz"
 CONFIG_INITRAMFS_COMPRESSION_GZIP=y
 # CONFIG_INITRAMFS_COMPRESSION_BZIP2 is not set
 # CONFIG_INITRAMFS_COMPRESSION_NONE is not set
