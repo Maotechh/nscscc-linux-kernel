@@ -1828,14 +1828,17 @@ static void ue11h_stop(struct usb_hcd *hcd)
 //-----------------------------------------------------------------
 static int ue11h_start(struct usb_hcd *hcd)
 {
-    struct ue11        *ue11 = hcd_to_ue11(hcd);
+	struct ue11	*ue11 = hcd_to_ue11(hcd);
+	unsigned long	flags;
 
-    /* chip has been reset, VBUS power is off */
-    hcd->state = HC_STATE_RUNNING;
-    /* enable power and interrupts */
-    port_power(ue11, 1);
+	/* chip has been reset, VBUS power is off */
+	hcd->state = HC_STATE_RUNNING;
+	/* enable power and interrupts */
+	spin_lock_irqsave(&ue11->lock, flags);
+	port_power(ue11, 1);
+	spin_unlock_irqrestore(&ue11->lock, flags);
 
-    return 0;
+	return 0;
 }
 //-----------------------------------------------------------------
 // ue11h_hc_driver structure
