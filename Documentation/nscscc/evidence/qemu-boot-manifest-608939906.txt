@@ -81,9 +81,33 @@ boot_lane_verdict=PASS (source-boot lane only)
 #       (boot-canon-initramfs.log / boot-canon-dmfe-off.log) and reproducible
 #       from the fragment + manifest at commit 83f53d429.
 
+# 5. ITERATION-042 RE-RUN at the committed integration head 8ab8d04dd with the
+#    fragment's initramfs source now COMMITTED (DS checkpoint-037-040
+#    portability finding).  The previous fragment referenced a host-local /tmp
+#    variant initramfs (9e5962b3...); CONFIG_INITRAMFS_SOURCE now names the
+#    committed canonical initramfs
+#    Documentation/nscscc/evidence/initramfs-426629c84.cpio.gz
+#    (sha256 0c18889c0e4f340cb754b49becdd8cecac6c2e9a1ba71752887016b74ddeb2c6),
+#    substituted with the srctree-rooted absolute path at build time.
+#    - kernel_commit=8ab8d04dd; baked UTS 5.14.0-rc2-g8ab8d04ddf3d
+#      (include/generated/utsrelease.h; clean tree, no -dirty).
+#    - vmlinux sha256 645987f51b71d286f045b65fc988688f73d4943e88ba3ffa22c08efab915ca41
+#      (212814488 B), config sha256 e0b50bb4... (UNCHANGED from the iteration-039
+#      canonical build => the fragment edit is config-neutral).
+#    - Embedded initramfs verified = canonical 0c18889c...
+#      (usr/initramfs_inc_data sha256 matches).
+#    - Boot to / # shell; S40network prints the non-fatal "Network interface
+#      not found: eth0".  Log: /tmp/opencode/la32r-qemu/boot-042-final.log
+#      (sha256 c729fdd3a38db69b7a28234c0473c9580f1cc390a820567aeb65a63e5e4691d3).
+#    => The lane is now reproducible from the git tree: toolchain + the QEMU
+#       wrapper are the only external inputs.  Still a source-boot lane; board
+#       peripherals remain operator-gated.
+
 # Follow-ups (deferred process items, checkpoint-033-036)
 # - [DONE, iteration 039] Re-run QEMU boot with canonical initramfs
 #   0c18889c... and record hashes: canonical boot to / # shell achieved with
 #   the iteration-039 fragment (adds CONFIG_DMFE_MAC disable).
+# - [DONE, iteration 042] Commit the initramfs reference so the lane no longer
+#   depends on a host-local /tmp artifact (fragment + re-run evidence).
 # - Consider committing the wrapper script + boot log to a campaign evidence
 #   store if the lane needs to survive host reboot independently of /tmp.
