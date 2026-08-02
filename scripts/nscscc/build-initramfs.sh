@@ -83,9 +83,9 @@ if [[ -n ${busybox_override} ]]; then
 	chmod 0755 "${rootfs}/bin/busybox"
 fi
 
-# Keep every applet used by nscscc-check available even when the imported
-# root filesystem contains only a subset of the BusyBox symlinks.
-required_busybox_applets=(cat dmesg grep ls mount ping tail uname)
+# Keep every applet used by nscscc-check and repeat-run automation available
+# when the imported root filesystem contains only a subset of BusyBox links.
+required_busybox_applets=(cat dmesg grep ls mount ping reboot tail uname)
 for applet in "${required_busybox_applets[@]}"; do
 	path=${rootfs}/bin/${applet}
 	if [[ ! -e ${path} ]]; then
