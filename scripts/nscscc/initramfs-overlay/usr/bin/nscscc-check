@@ -5,6 +5,13 @@ config=/etc/nscscc/network.conf
 SERVER_IP=10.90.50.43
 [ -r "${config}" ] && . "${config}"
 
+echo "=== basic commands ==="
+if ! command -v ls; then
+	echo "ls is not available on PATH" >&2
+	exit 1
+fi
+ls -la / || exit 1
+
 echo "=== kernel ==="
 uname -a
 

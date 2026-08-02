@@ -82,6 +82,13 @@ if [[ -n ${busybox_override} ]]; then
 	cp "${busybox_override}" "${rootfs}/bin/busybox"
 	chmod 0755 "${rootfs}/bin/busybox"
 fi
+if [[ ! -e ${rootfs}/bin/ls ]]; then
+	ln -s busybox "${rootfs}/bin/ls"
+fi
+if [[ ! -x ${rootfs}/bin/ls ]]; then
+	echo "Initramfs /bin/ls is not executable" >&2
+	exit 1
+fi
 
 mkdir -p \
 	"${rootfs}/dev/pts" \
