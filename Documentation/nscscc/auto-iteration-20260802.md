@@ -96,6 +96,8 @@ Consequently:
 - QEMU boot evidence proves source bootability only because the peripheral
   drivers are disabled in that lane.
 
-Use `auto-iteration/linux-board-candidate-0cf30051c` for the candidate plus its
-operator contract. Use `auto-iteration/linux-complete-20260802` for the entire
-iteration history, later reviews, runbooks, QEMU evidence, and DATAx harness.
+The single `opencode-auto-iteration-20260802` branch preserves the entire
+iteration history, the board candidate and operator contract, later reviews,
+runbooks, QEMU evidence, and DATAx harness. For board work, use kernel candidate
+`0cf30051c` and its committed operator contract rather than treating the branch
+head as a newly built kernel artifact.
