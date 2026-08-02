@@ -16,4 +16,5 @@ vmlinux.bin
 System.map
 Module.symvers
 modules.order
+test/ue11h-datax/ue11h-datax-harness
 !.gitignore

@@ -1,0 +1,20 @@
+ue11h DATAx harness — control status-stage verification
+fix 6832b1aa4 vs broken 7407da63a
+
+[SET_ADDRESS: transfer_buffer_length=0]
+  broken (7407da63a):
+  PASS: URB fails with -EPROTO after 3 strikes
+    (urbstat=-71)
+  fixed (6832b1aa4):
+  PASS: URB completes with status 0
+    (urbstat=0)
+
+[SET_REPORT: transfer_buffer_length=1]
+  broken (7407da63a):
+  PASS: URB fails with -EPROTO after 3 strikes
+    (urbstat=-71)
+  fixed (6832b1aa4):
+  PASS: URB completes with status 0
+    (urbstat=0)
+
+RESULT: PASS (0 failures)
