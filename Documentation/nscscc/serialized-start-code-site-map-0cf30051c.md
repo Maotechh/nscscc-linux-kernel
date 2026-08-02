@@ -31,11 +31,18 @@ The comment documents the invariant: first start runs right after
 **Observation:** `ue11h_stop` (`ue11-hcd.c:1825`) does `del_timer_sync` on
 both `hcd->rh_timer` and `ue11->timer` (1830-1831) BEFORE taking the lock and
 calling `port_power(ue11, 0)` (1833-1835).  `ue11h_bus_suspend`
-(`ue11-hcd.c:1800`) is a no-op (SOFs off only, returns 0) — it does NOT
-`del_timer_sync`.  If the USB core ever calls `bus_suspend` while the 50/20 ms
-recovery timer is armed, the timer callback still runs; it is protected only by
-the stale-timer guard below, not by timer cancellation.  Worth checking whether
-the core actually issues `bus_suspend` with a pending reset on this stack.
+(`ue11-hcd.c:1800`) is a no-op: it only emits a debug log and returns 0.  It
+does NOT `del_timer_sync`, does NOT clear `USB_PORT_STAT_POWER`, and does NOT
+set `hcd->state = HC_STATE_HALT`.  Consequently, if the USB core ever calls
+`bus_suspend` while the 50/20 ms recovery timer is armed, the callback still
+runs — and because the port is still powered and the HCD still running, the
+stale-timer guard below is NOT guaranteed to reject it (it may continue through
+Phase 1/2).  The guard only guarantees suppression AFTER a transition has
+cleared POWER or set HALT (port-power off, `ue11h_stop`, or the platform
+suspend path); plain `ue11h_bus_suspend` currently does neither.  This is an
+open board/runtime question, not a proven static defect.  Worth checking
+whether the core actually issues `bus_suspend` with a pending reset on this
+stack.
 
 ## Stale-timer guard (the actual race stopper)
 
@@ -51,9 +58,12 @@ if (!(ue11->port1 & USB_PORT_STAT_POWER) ||
 }
 ```
 
-This is the guard that makes a late armed timer benign after a power-off /
-suspend / stop cycle: it clears `reset_recovery` and returns without any
-register write, so no USB write reaches an unpowered/HALT port.
+This is the guard that makes a late armed timer benign after a transition has
+cleared POWER or set HALT (port-power off, `ue11h_stop`, or the platform
+suspend path): it clears `reset_recovery` and returns without any register
+write, so no USB write reaches an unpowered/HALT port.  A pending timer across
+plain `ue11h_bus_suspend` is NOT covered, because that callback leaves POWER
+set and `hcd->state` running.
 
 ## port_power transition handling
 
