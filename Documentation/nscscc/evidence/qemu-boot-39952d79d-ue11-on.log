@@ -1,0 +1,205 @@
+loongson32_init: num_nodes 1
+loongson32_init: node 0 mem 0x8000000
+[    0.000000] Linux version 5.14.0-rc2-g39952d79db85 (root@a4ba9j36jlj6f-0) (loongarch32r-linux-gnusf-gcc (LoongArch GNU toolchain LA32 v2.0 (20230903)) 8.3.0, GNU ld (LoongArch GNU toolchain LA32 v2.0 20230903) 2.31.1.20190122) #1 PREEMPT Sat Aug 1 21:58:17 UTC 2026
+[    0.000000] Standard 32-bit Loongson Processor probed
+[    0.000000] the link is empty!
+[    0.000000] Scan bootparam failed
+[    0.000000] printk: bootconsole [early0] enabled
+[    0.000000] initrd start < PAGE_OFFSET
+[    0.000000] Can't find EFI system table.
+[    0.000000] start_pfn=0x0, end_pfn=0x8000, num_physpages:0x8000
+[    0.000000] The BIOS Version: (null)
+[    0.000000] Initrd not found or empty - disabling initrd
+[    0.000000] CPU0 revision is: 00004200 (Loongson-32bit)
+[    0.000000] Primary instruction cache 8kB, 2-way, VIPT, linesize 16 bytes.
+[    0.000000] Primary data cache 8kB, 2-way, VIPT, no aliases, linesize 16 bytes
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x00000000ffffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] eentry = 0xa0210000,tlbrentry = 0xa0201000
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 32480
+[    0.000000] Kernel command line: earlycon atkbd.reset=0 psmouse.proto=bare
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 113932K/131072K available (8904K kernel code, 1150K rwdata, 1668K rodata, 1516K init, 497K bss, 17140K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.016000] Console: colour dummy device 80x25
+[    0.016000] printk: console [tty0] enabled
+[    0.016000] printk: bootconsole [early0] disabled
+[    0.000000] Linux version 5.14.0-rc2-g39952d79db85 (root@a4ba9j36jlj6f-0) (loongarch32r-linux-gnusf-gcc (LoongArch GNU toolchain LA32 v2.0 (20230903)) 8.3.0, GNU ld (LoongArch GNU toolchain LA32 v2.0 20230903) 2.31.1.20190122) #1 PREEMPT Sat Aug 1 21:58:17 UTC 2026
+[    0.000000] Standard 32-bit Loongson Processor probed
+[    0.000000] the link is empty!
+[    0.000000] Scan bootparam failed
+[    0.000000] printk: bootconsole [early0] enabled
+[    0.000000] initrd start < PAGE_OFFSET
+[    0.000000] Can't find EFI system table.
+[    0.000000] start_pfn=0x0, end_pfn=0x8000, num_physpages:0x8000
+[    0.000000] The BIOS Version: (null)
+[    0.000000] Initrd not found or empty - disabling initrd
+[    0.000000] CPU0 revision is: 00004200 (Loongson-32bit)
+[    0.000000] Primary instruction cache 8kB, 2-way, VIPT, linesize 16 bytes.
+[    0.000000] Primary data cache 8kB, 2-way, VIPT, no aliases, linesize 16 bytes
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x00000000ffffffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x0000000007ffffff]
+[    0.000000] eentry = 0xa0210000,tlbrentry = 0xa0201000
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 32480
+[    0.000000] Kernel command line: earlycon atkbd.reset=0 psmouse.proto=bare
+[    0.000000] Dentry cache hash table entries: 16384 (order: 4, 65536 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 8192 (order: 3, 32768 bytes, linear)
+[    0.000000] mem auto-init: stack:off, heap alloc:off, heap free:off
+[    0.000000] Memory: 113932K/131072K available (8904K kernel code, 1150K rwdata, 1668K rodata, 1516K init, 497K bss, 17140K reserved, 0K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Preemptible hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU event tracing is enabled.
+[    0.000000] 	Trampoline variant of Tasks RCU enabled.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] NR_IRQS: 320
+[    0.000000] Constant clock event device register
+[    0.000000] clocksource: Constant: mask: 0xffffffffffffffff max_cycles: 0x2e2049d3e8, max_idle_ns: 440795210634 ns
+[    0.000000] Constant clock source device register
+[    0.016000] Console: colour dummy device 80x25
+[    0.016000] printk: console [tty0] enabled
+[    0.016000] printk: bootconsole [early0] disabled
+[    0.020000] Calibrating delay loop (skipped), value calculated using timer frequency.. 400.00 BogoMIPS (lpj=800000)
+[    0.020000] pid_max: default: 32768 minimum: 301
+[    0.024000] LSM: Security Framework initializing
+[    0.028000] Mount-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.028000] Mountpoint-cache hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.088000] rcu: Hierarchical SRCU implementation.
+[    0.116000] devtmpfs: initialized
+[    0.132000] random: get_random_u32 called from bucket_table_alloc.isra.38+0x68/0x1e0 with crng_init=0
+[    0.140000] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.140000] futex hash table entries: 256 (order: -1, 3072 bytes, linear)
+[    0.144000] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.300000] raid6: int32x8  gen()   745 MB/s
+[    0.372000] raid6: int32x8  xor()   227 MB/s
+[    0.440000] raid6: int32x4  gen()  1595 MB/s
+[    0.508000] raid6: int32x4  xor()   653 MB/s
+[    0.576000] raid6: int32x2  gen()    93 MB/s
+[    0.644000] raid6: int32x2  xor()   662 MB/s
+[    0.712000] raid6: int32x1  gen()   705 MB/s
+[    0.780000] raid6: int32x1  xor()   326 MB/s
+[    0.780000] raid6: using algorithm int32x4 gen() 1595 MB/s
+[    0.780000] raid6: .... xor() 653 MB/s, rmw enabled
+[    0.780000] raid6: using intx1 recovery algorithm
+[    0.792000] SCSI subsystem initialized
+[    0.800000] usbcore: registered new interface driver usbfs
+[    0.800000] usbcore: registered new interface driver hub
+[    0.800000] usbcore: registered new device driver usb
+[    0.800000] pps_core: LinuxPPS API ver. 1 registered
+[    0.800000] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.832000] clocksource: Switched to clocksource Constant
+[    0.872000] FS-Cache: Loaded
+[    0.924000] NET: Registered PF_INET protocol family
+[    0.928000] IP idents hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.964000] tcp_listen_portaddr_hash hash table entries: 512 (order: 0, 4096 bytes, linear)
+[    0.964000] TCP established hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.964000] TCP bind hash table entries: 1024 (order: 0, 4096 bytes, linear)
+[    0.964000] TCP: Hash tables configured (established 1024 bind 1024)
+[    0.968000] UDP hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.968000] UDP-Lite hash table entries: 256 (order: 0, 4096 bytes, linear)
+[    0.972000] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    1.008000] workingset: timestamp_bits=14 max_order=15 bucket_order=1
+[    1.024000] ntfs: driver 2.1.32 [Flags: R/W DEBUG].
+[    1.024000] SGI XFS with security attributes, quota, no debug enabled
+[    1.028000] xor: measuring software checksum speed
+[    1.104000]    8regs           :  1078 MB/sec
+[    1.112000]    8regs_prefetch  :  1469 MB/sec
+[    1.128000]    32regs          :  2048 MB/sec
+[    1.128000]    32regs_prefetch :  2838 MB/sec
+[    1.180000] random: fast init done
+[    1.184000] xor: using function: 32regs_prefetch (2838 MB/sec)
+[    1.184000] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    1.184000] io scheduler mq-deadline registered
+[    1.184000] io scheduler kyber registered
+[    1.184000] io scheduler bfq registered
+[    1.224000] IPMI message handler: version 39.2
+[    1.232000] ipmi device interface
+[    1.280000] ipmi_si: IPMI System Interface driver
+[    1.280000] ipmi_si: Unable to find any System Interface(s)
+[    1.312000] Serial: 8250/16550 driver, 16 ports, IRQ sharing enabled
+[    1.368000] 1fe001e0.serial: ttyS0 at MMIO 0x1fe001e0 (irq = 19, base_baud = 6250000) is a 16550A
+[    1.420000] printk: console [ttyS0] enabled
+[    1.420000] chiplab_confreg 1fd0e000.confreg: registered /dev/chiplab_confreg and /sys/class/chiplab_confreg/chiplab_confreg
+[    1.472000] loop: module loaded
+[    1.472000] ls1a-nand driver initializing
+[    1.508000] libphy: Fixed MDIO Bus: probed
+[    1.512000] tun: Universal TUN/TAP device driver, 1.6
+[    1.516000] Kernel ade access[#1]:
+[    1.516000] CPU: 0 PID: 1 Comm: swapper Not tainted 5.14.0-rc2-g39952d79db85 #1
+[    1.516000] $ 0   : 00000000 a0992cdc a1832000 a1833dd0
+[    1.516000] $ 4   : a18af15c a0991e80 00000000 00000000
+[    1.516000] $ 8   : 00000000 a1833cd8 00000004 00000000
+[    1.516000] $12   : 00000001 a18af190 1fe0c000 a097e0b0
+[    1.516000] $16   : ffffffe0 00000043 a0c2bb80 00000000
+[    1.516000] $20   : 00000001 00001000 a0ea4008 a18af000
+[    1.516000] $24   : 00000018 a1806f40 9fe0c000 a186f810
+[    1.516000] $28   : a18af140 00000008 a0e750a0 a0e9bbb8
+[    1.516000] epc   : a0992cf8 ue11h_probe+0xf8/0x230
+[    1.516000] ra    : a0992cdc ue11h_probe+0xdc/0x230
+[    1.516000] CSR crmd: 000000b0	
+[    1.516000] CSR prmd: 00000004	
+[    1.516000] CSR ecfg: 00071c3c	
+[    1.516000] CSR estat: a1806f40	
+[    1.516000] CSR euen: 00000000	
+[    1.516000] ExcCode : 0 (SubCode 86)
+[    1.516000] Modules linked in:
+[    1.516000] Process swapper (pid: 1, threadinfo=(ptrval), task=(ptrval))
+[    1.516000] Stack : a0ff3008 a0ff3008 00000000 a186f810 a0e53b68 a0e53b68 a186f810 a08ad01c
+[    1.516000]         a0e53b68 00000000 a186f810 a08aa9e0 a1066f88 a0e53b68 a1066e7c a08aad0c
+[    1.516000]         a08ab160 a0e53b68 a0e9bb98 00000000 a08ab160 a0e53b68 a186f810 a08ab1d0
+[    1.516000]         a08ab160 a0e53b68 00000000 a08a8884 a0e4ee78 a182229c a182228c a180d8b0
+[    1.516000]         a0e4ee78 a1a85240 a0e53b68 a08a9d60 00000000 a0e90884 a0e53b68 a0d53d5c
+[    1.516000]         ...
+[    1.516000] Call Trace:
+[    1.516000] 
+[    1.516000] [<a08ad01c>] platform_probe+0x4c/0xa0
+[    1.516000] [<a08aa9e0>] really_probe+0xa0/0x2c0
+[    1.516000] [<a08aad0c>] driver_probe_device+0x4c/0x110
+[    1.516000] [<a08ab160>] __driver_attach+0x0/0x120
+[    1.516000] [<a08ab160>] __driver_attach+0x0/0x120
+[    1.516000] [<a08ab1d0>] __driver_attach+0x70/0x120
+[    1.516000] [<a08ab160>] __driver_attach+0x0/0x120
+[    1.516000] [<a08a8884>] bus_for_each_dev+0x64/0xb0
+[    1.516000] [<a08a9d60>] bus_add_driver+0x1d0/0x1e0
+[    1.516000] [<a0e90884>] ue11h_driver_init+0x0/0x10
+[    1.516000] [<a0e90884>] ue11h_driver_init+0x0/0x10
+[    1.516000] [<a08ab894>] driver_register+0x64/0x130
+[    1.516000] [<a0e90884>] ue11h_driver_init+0x0/0x10
+[    1.516000] [<a03000f8>] do_one_initcall+0x68/0x1b0
+[    1.516000] [<a032cbbc>] parse_args+0xbc/0x300
+[    1.516000] [<a0e750a0>] ignore_unknown_bootoption+0x0/0x8
+[    1.516000] [<a0e75f40>] kernel_init_freeable+0x1c0/0x230
+[    1.516000] [<a0bac144>] wait_for_completion+0x164/0x1a0
+[    1.516000] [<a0ba8f74>] kernel_init+0x0/0x10c
+[    1.516000] [<a0ba8f90>] kernel_init+0x1c/0x10c
+[    1.516000] [<a0ba8f74>] kernel_init+0x0/0x10c
+[    1.516000] [<a0301110>] ret_from_kernel_thread+0xc/0x10
+[    1.516000] 
+[    1.516000] Code: 4c028004  934c0280  80934c02 <2980934c> 04298093  28042980  80280429  02802804  fa028028 
+[    1.516000] 
+[    1.532000] ---[ end trace 36d7a69df46f8b63 ]---
+[    1.556000] Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b
+[    1.556000] ---[ end Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b ]---
+qemu-system-loongarch32: terminating on signal 15 from pid 1036779 (timeout)
+RUN_EXIT=124
