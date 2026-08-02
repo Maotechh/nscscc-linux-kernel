@@ -39,10 +39,27 @@ runs — and because the port is still powered and the HCD still running, the
 stale-timer guard below is NOT guaranteed to reject it (it may continue through
 Phase 1/2).  The guard only guarantees suppression AFTER a transition has
 cleared POWER or set HALT (port-power off, `ue11h_stop`, or the platform
-suspend path); plain `ue11h_bus_suspend` currently does neither.  This is an
-open board/runtime question, not a proven static defect.  Worth checking
-whether the core actually issues `bus_suspend` with a pending reset on this
-stack.
+suspend path); plain `ue11h_bus_suspend` currently does neither.
+
+**Reachability scope (Opus checkpoint-053-056 C1, verified statically
+2026-08-02):** this open question is **unreachable on the board-bound
+candidate** and is retained only for a future `CONFIG_PM=y` configuration.
+`ue11h_bus_suspend`/`ue11h_bus_resume` are inside `#ifdef CONFIG_PM`
+(`ue11-hcd.c:1796-1821`); with `CONFIG_PM` unset the driver takes the `#else`
+arm and defines them `NULL` (1818-1819), and `ue11h_suspend`/`ue11h_resume`
+are likewise `NULL` (2057-2058).  `CONFIG_PM` is NOT set in the board-bound
+build: the `.config` (sha256
+`e4565246f1d3fb28a703bcaa22b4416bb27249802876b3cc292fa8f55135ff09`, matching
+`kernel_config_sha256` in `vmlinux-0cf30051c.manifest`) has no `CONFIG_PM=y`,
+no `CONFIG_SUSPEND`/`CONFIG_PM_SLEEP`/`CONFIG_HIBERNATION`; `CONFIG_PM` is
+undefined in `autoconf.h`; and `nm vmlinux-0cf30051c-debug` shows zero
+`ue11h_*suspend/resume` and zero `hcd_bus_suspend`/`hcd_bus_resume`/
+`usb_remote_wakeup` symbols (USB-core PM compiled out too; sanity: 63828 total
+symbols, 92 matching `suspend` elsewhere).  So on the board-bound triple the
+USB core **cannot** invoke `ue11h_bus_suspend`, root-hub autosuspend is off
+(`drivers/usb/core/hub.c:1830` tests `drv->bus_suspend && drv->bus_resume`,
+both NULL), and no suspend path can execute.  The 056/057 analysis remains
+correct at source level and is re-scoped here, not deleted.
 
 ## Stale-timer guard (the actual race stopper)
 
@@ -104,17 +121,25 @@ so URBs cannot reach an unpowered/HALT port either.
   stack trace — that is the direct failure signature to capture.
 - `USB: post-reset raw-linestate=0x%x` / `post-reset port=...` (1623/1644)
   confirm Phase 2 ran against a powered port.
-- `USB: port power OFF` (power-off/suspend/stop) followed by a second
+- `USB: port power OFF` (power-off/stop) followed by a second
   `USB: port power ON` (re-arm) is the serialized-start cycle to script on the
-  board (e.g. `echo suspend >/sys/.../usb_hcd`, power-cycle the receiver, or
-  unplug/replug).
+  board (e.g. power-cycle the receiver, or unplug/replug).
+- **NOT a board signature on this candidate (C1):** there is no suspend path to
+  observe — `CONFIG_PM` is unset, `ue11h_bus_suspend`/`ue11h_bus_resume`/
+  `ue11h_suspend`/`ue11h_resume` are all `NULL` in the image, and root-hub
+  autosuspend is disabled.  Do NOT script `echo suspend >/sys/.../usb_hcd` or
+  watch for a WARN at restart after suspend; that expectation was dropped from
+  the board-day runbook.  The serialized-start cycle on this triple is limited
+  to power-off/stop (disconnect/reconnect or driver unbind/rebind).
 
 ## Conclusion
 
 The serialized-start invariant is structurally sound at HEAD: `ue11h_stop`
 cancels the timer, `ue11h_start` WARNs on a pending timer, `port_power` clears
 `reset_recovery` on every transition, and the timer callback re-validates
-power/HALT state before any register write.  The single open question is
-whether `ue11h_bus_suspend` (no `del_timer_sync`) can be invoked with a pending
-recovery timer on this stack; that is a board-observable scenario, not a
-static defect.
+power/HALT state before any register write.  The former open question
+(whether `ue11h_bus_suspend`, which does no `del_timer_sync`, can be invoked
+with a pending recovery timer) is **unreachable on this candidate**: `CONFIG_PM`
+is unset in the board-bound config, all four suspend/resume callbacks are `NULL`
+in the image, and root-hub autosuspend is off.  The analysis is retained,
+re-scoped to a future `CONFIG_PM=y` configuration.

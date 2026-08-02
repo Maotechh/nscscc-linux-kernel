@@ -159,6 +159,18 @@ it contains both PS/2 flags.
 - Mouse: with `psmouse.proto=bare`, expect PS/2 mouse registration and
   pointer events.
 
+**Known-negative qualifier (Opus C2):** the only board-capable USB bitstream
+`5df92d99...` carries the **pre-0724 receive-only** PS/2 controller, for which
+the contract already predicts `atkbd` reset failure (the bidirectional PS/2
+controller was added by `chiplab-ps2-bidirectional-20260724.patch`, which has
+never been built into a routed bitstream).  On any run against `5df92d99...`,
+an `atkbd` reset failure / no keyboard events is the **expected known-negative
+result and NOT a kernel finding** — it is a bitstream-capability result.  PS/2
+board proof is recorded as **BLOCKED-NO-BITSTREAM** (a CPU-lane Vivado funnel
+item via `nscscc-fpga-evaluate`), not pending-operator.  Only `altera_ps2`
+probe + serio registration are kernel-lane expectations on this triple; key and
+pointer events additionally require the never-built paired bitstream.
+
 ## Pass / fail criteria
 
 - PASS = each captured serial/status log matches the expected markers above
@@ -216,3 +228,26 @@ refreshed kernel**. The asks are:
 PAUSE trigger: after two delivered waves with neither a bitstream nor an
 operator response, the campaign pauses and waits for operator direction
 (delivery-evidence guard, iteration 046: only DELIVERED waves count).
+
+## 08-04 decision table (written 2026-08-02, Opus checkpoint-053-056 C2)
+
+Executed mechanically at `2026-08-04T18:32:30Z` (wave-1 reply-window expiry);
+no fresh deliberation needed at the deadline:
+
+| At 08-04 18:32:30Z | Action |
+|---|---|
+| Wave-1 answered (board log / bitstream returned) | Board lane resumes; interpret the returned serial log against `board-day-observation-runbook-0cf30051c.md` (corrected per C1: no suspend path). Escalation clock stops. |
+| Wave-1 unanswered | Deliver **wave 2 = ONE narrowed USB ask**: program `soc_top-ad6551-cpu40-uncore100.bit` (`5DF92D99...`, `feature_usb=true`, DRC 0, WNS +0.011456 ns), TFTP-boot the `0cf30051c` triple, return the serial log (with `lsusb`/`evtest`). One bitstream, one boot, one file back. Set a fresh reply window. **Do NOT re-ask the operator for the paired PS/2 bitstream** — it cannot be produced by any operator reply. |
+| Wave-2 lapses | **PAUSE the board lane only** (`board_lane_paused` control-plane event): stop re-asking, mark the lane `BLOCKED-AWAITING-OPERATOR` (USB) / `BLOCKED-NO-BITSTREAM` (PS/2), with no further waves. Local lanes continue. |
+
+**PAUSE semantics (defined 2026-08-02, pre-deadline):** PAUSE means *board-lane
+pause*, not campaign stop.  It does not contradict the campaign objective: it
+stops re-asking an unresponsive operator and marks the board lane
+`BLOCKED-AWAITING-OPERATOR` (USB proof, operator action) and
+`BLOCKED-NO-BITSTREAM` (PS/2 proof, CPU-lane Vivado build), while local lanes
+with real verification capability continue.  The two blockers behind
+"USB/PS-2 board proof" are NOT the same blocker: USB is operator-blocked against
+an existing never-programmed DRC-clean bitstream; PS/2 is blocked on a bitstream
+that has never been built and must be re-routed to the CPU-lane
+`$nscscc-fpga-evaluate` Vivado funnel (different queue, different owner,
+different skill).

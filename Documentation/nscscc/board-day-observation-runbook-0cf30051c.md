@@ -91,8 +91,14 @@ below is the direct on-board proof that the `7407da63a` regression is gone.
 `USB_PORT_FEAT_ENABLE (DISABLE)`, `USB_PORT_FEAT_SUSPEND (RESUME)`,
 `USB_PORT_FEAT_SUSPEND (SUSPEND)`, `USB_PORT_FEAT_POWER (power on)`,
 `USB_PORT_FEAT_RESET`. Their presence shows USB core is driving root-hub
-features; order should be power-on -> reset -> (suspend/resume during
-re-enumeration cycles).
+features; order should be power-on -> reset.  **Reachability scope (C1):** the
+`USB_PORT_FEAT_SUSPEND` prints will NOT appear on this candidate — `CONFIG_PM`
+is unset in the board-bound config, `ue11h_bus_suspend`/`ue11h_bus_resume`/
+`ue11h_suspend`/`ue11h_resume` are all `NULL` in the image (zero
+`ue11h_*suspend/resume` and zero `hcd_bus_suspend` symbols in
+`nm vmlinux-0cf30051c-debug`), and root-hub autosuspend is off.  Their absence
+is expected and is NOT a failure, and there is no WARN-at-restart-after-suspend
+signature to watch for on this triple.
 
 ## PS/2 lane: marker -> source site
 
@@ -108,6 +114,15 @@ Follow-up markers come from the serio/input layer, not the driver:
 `serio0: Fast keyboard connected` (atkbd, requires `atkbd.reset=0` bootarg) and
 `psmouse` registration (requires `psmouse.proto=bare` bootarg). Do NOT expect
 `0xaa BAT`: bootargs keep reset disabled on the single-channel controller.
+
+**Known-negative qualifier (Opus C2):** the only board-capable USB bitstream
+`5df92d99...` carries the **pre-0724 receive-only** PS/2 controller, so on any
+run against it `atkbd` reset failure / no key events is the **expected result
+and NOT a kernel finding** — a bitstream-capability result.  PS/2 board proof
+is **BLOCKED-NO-BITSTREAM** (CPU-lane Vivado funnel), not pending-operator.
+Kernel-lane PS/2 expectations on this triple stop at `altera_ps2` probe + serio
+registration; key/pointer events additionally require the never-built paired
+bitstream.
 
 ## Decision table for the operator
 
