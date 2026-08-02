@@ -82,13 +82,20 @@ if [[ -n ${busybox_override} ]]; then
 	cp "${busybox_override}" "${rootfs}/bin/busybox"
 	chmod 0755 "${rootfs}/bin/busybox"
 fi
-if [[ ! -e ${rootfs}/bin/ls ]]; then
-	ln -s busybox "${rootfs}/bin/ls"
-fi
-if [[ ! -x ${rootfs}/bin/ls ]]; then
-	echo "Initramfs /bin/ls is not executable" >&2
-	exit 1
-fi
+
+# Keep every applet used by nscscc-check available even when the imported
+# root filesystem contains only a subset of the BusyBox symlinks.
+required_busybox_applets=(cat dmesg grep ls mount ping tail uname)
+for applet in "${required_busybox_applets[@]}"; do
+	path=${rootfs}/bin/${applet}
+	if [[ ! -e ${path} ]]; then
+		ln -s busybox "${path}"
+	fi
+	if [[ ! -x ${path} ]]; then
+		echo "Initramfs /bin/${applet} is not executable" >&2
+		exit 1
+	fi
+done
 
 mkdir -p \
 	"${rootfs}/dev/pts" \
