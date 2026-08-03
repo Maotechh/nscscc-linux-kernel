@@ -934,6 +934,7 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
     struct urb  *urb;
     int         urbstat = -EINPROGRESS;
     uint8_t     response = 0;
+	bool        duplicate = false;
     bool        transaction_error;
     int l;
 
@@ -976,21 +977,33 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
 
 	if (expected == received)
 		response = USB_PID_ACK;
-	else
+	else if (ep->nextpid == USB_PID_IN) {
+		/*
+		 * The SIE has already ACKed the packet.  A stale DATA PID is a
+		 * retransmission after a lost ACK, so discard it without advancing
+		 * the URB or endpoint toggle (USB 2.0 8.6.4).
+		 */
+		duplicate = true;
+		dev_dbg_ratelimited(ue11_to_hcd(ue11)->self.controller,
+				    "duplicate DATA%d on ep%02x, expected DATA%d\n",
+				    received, usb_pipeendpoint(urb->pipe), expected);
+	} else {
 		USB_LOG(USBLOG_ERR,
 			("USB: DATAx mismatch ep=%02x exp=%d got=%d\n",
 			 usb_pipeendpoint(urb->pipe), expected, received));
+	}
     }
 
 
-    /* we can safely ignore NAKs */
-    if (response == USB_PID_NAK)
-    {
-        USB_LOG(USBLOG_DATA, ("USB: NAK %d\n", ep->nak_count));
-        if (!ep->period)
-            ep->nak_count++;
-        ep->error_count = 0;
-    }
+    /* Duplicate IN data and NAKs leave the URB queued for a retry. */
+	if (duplicate) {
+		ep->error_count = 0;
+	} else if (response == USB_PID_NAK) {
+		USB_LOG(USBLOG_DATA, ("USB: NAK %d\n", ep->nak_count));
+		if (!ep->period)
+			ep->nak_count++;
+		ep->error_count = 0;
+	}
     /* ACK advances transfer, toggle, and maybe queue */
     else if (response == USB_PID_ACK)
     {
@@ -1118,11 +1131,9 @@ static irqreturn_t ue11h_irq(struct usb_hcd *hcd)
     struct ue11    *ue11 = hcd_to_ue11(hcd);
     uint32_t        irqstat;
     irqreturn_t ret = IRQ_NONE;
-    unsigned    retries = 5;
 
     spin_lock(&ue11->lock);
 
-retry:
     irqstat = readl(ue11->reg_base + USB_IRQ_STS);
     // Ack interrupt
     if (irqstat)
@@ -1163,8 +1174,6 @@ retry:
         if (ue11->port1 & USB_PORT_STAT_ENABLE)
             start_transfer(ue11);
         ret = IRQ_HANDLED;
-        if (retries--)
-            goto retry;
     }
 
     if (ue11->periodic_count == 0 && list_empty(&ue11->async))
