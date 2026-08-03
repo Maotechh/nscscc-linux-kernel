@@ -83,9 +83,11 @@ if [[ -n ${busybox_override} ]]; then
 	chmod 0755 "${rootfs}/bin/busybox"
 fi
 
-# Keep every applet used by nscscc-check and repeat-run automation available
-# when the imported root filesystem contains only a subset of BusyBox links.
-required_busybox_applets=(cat dmesg grep ls mount ping reboot tail uname)
+# Keep every applet used by the initramfs scripts and validation commands
+# available when the imported root filesystem has only a subset of links.
+required_busybox_applets=(
+	cat chmod dmesg grep hostname ls mkdir mount ping sync tail umount uname
+)
 for applet in "${required_busybox_applets[@]}"; do
 	path=${rootfs}/bin/${applet}
 	if [[ ! -e ${path} ]]; then
@@ -96,6 +98,14 @@ for applet in "${required_busybox_applets[@]}"; do
 		exit 1
 	fi
 done
+
+if [[ ! -e ${rootfs}/sbin/reboot ]]; then
+	ln -s ../bin/busybox "${rootfs}/sbin/reboot"
+fi
+if [[ ! -x ${rootfs}/sbin/reboot ]]; then
+	echo "Initramfs /sbin/reboot is not executable" >&2
+	exit 1
+fi
 
 mkdir -p \
 	"${rootfs}/dev/pts" \

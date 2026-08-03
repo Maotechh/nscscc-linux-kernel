@@ -25,6 +25,8 @@ PS/2 的 Chiplab patch、controller 来源、寄存器 ABI 和自动仿真说明
 [`Documentation/nscscc/chiplab-ps2-controller.md`](Documentation/nscscc/chiplab-ps2-controller.md)。
 所有实际复制或修改后复用的第三方代码见
 [`Documentation/nscscc/third-party-code.md`](Documentation/nscscc/third-party-code.md)。
+官方评分条件、当前已确认项目和仍需等待组委会发布的 Linux 指定操作见
+[`Documentation/nscscc/contest-requirements-2026.md`](Documentation/nscscc/contest-requirements-2026.md)。
 
 ## 最近 main 变更
 
@@ -54,6 +56,16 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
   的 reset sequence。
 - Buildroot 加入 `usbutils` 和 `evtest`，并校验 `lsusb` 的 LoongArch ELF
   identity、runtime dependency 和 SHA256。
+
+2026-08-03 的基础 userspace 更新：
+
+- initramfs 构建保证 `ls` 及启动脚本、验证脚本和重复运行所需的 BusyBox
+  applet 链接存在。
+- `nscscc-check` 明确检查 `ls` 并执行 `ls -la /`。
+- 两次独立 FPGA 编程、TFTP 和 Linux 运行均进入 `/ #`，完成 `ls`、DMFE、
+  confreg 和基础系统命令检查。
+- 官方技术方案确认 Linux 成功启动对应系统测试 15 分；20 分等级所需的指定
+  操作明细尚未发布，因此当前没有声明已经完成全部 20 分条件。
 
 本次更新已完成交叉编译和静态检查。PS/2 key event、USB enumeration、mouse
 event 和 disconnect 行为仍需要在后续单独进行实物验证。
