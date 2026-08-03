@@ -620,8 +620,11 @@ static void in_packet(struct ue11 *ue11, struct ue11h_ep *ep, struct urb *urb)
     ctrl|= (1 << USB_XFER_TOKEN_IN_SHIFT);    // Device -> Host
     ctrl|= (1 << USB_XFER_TOKEN_ACK_SHIFT);   // Respond with ACK
 
-    // DataX?
-    //ctrl|=  usb_gettoggle(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe)) ? (1 << USB_XFER_TOKEN_PID_DATAX_SHIFT) : (0 << USB_XFER_TOKEN_PID_DATAX_SHIFT);
+	/* Select the DATA PID expected for this endpoint. */
+	ctrl |= usb_gettoggle(urb->dev, usb_pipeendpoint(urb->pipe),
+			      usb_pipeout(urb->pipe)) ?
+		(1 << USB_XFER_TOKEN_PID_DATAX_SHIFT) :
+		(0 << USB_XFER_TOKEN_PID_DATAX_SHIFT);
 
     token = (((uint32_t)USB_PID_IN)<<USB_XFER_TOKEN_PID_BITS_SHIFT) | (device_addr << USB_XFER_TOKEN_DEV_ADDR_SHIFT) | (endpoint << USB_XFER_TOKEN_EP_ADDR_SHIFT);
     writel(token | ctrl, ue11->reg_base + USB_XFER_TOKEN);
@@ -960,10 +963,23 @@ static void process_transfer_result(struct ue11 *ue11, struct ue11h_ep *ep)
     if (((ep->nextpid == USB_PID_IN) || (ep->nextpid == USB_PID_ACK)) && 
         (response == USB_PID_DATA0 || response == USB_PID_DATA1))
     {
-        // TODO: Check DATAx is correct
+	int received = response == USB_PID_DATA1;
+	int expected;
 
-        // Convert to ACK if all is well...
-        response = USB_PID_ACK;
+	/* A control status stage always uses DATA1 (USB 2.0 8.5.3). */
+	if (ep->nextpid == USB_PID_ACK)
+		expected = 1;
+	else
+		expected = usb_gettoggle(urb->dev,
+					 usb_pipeendpoint(urb->pipe),
+					 usb_pipeout(urb->pipe));
+
+	if (expected == received)
+		response = USB_PID_ACK;
+	else
+		USB_LOG(USBLOG_ERR,
+			("USB: DATAx mismatch ep=%02x exp=%d got=%d\n",
+			 usb_pipeendpoint(urb->pipe), expected, received));
     }
 
 
