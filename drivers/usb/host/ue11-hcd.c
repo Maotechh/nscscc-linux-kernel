@@ -25,6 +25,7 @@
 #include <linux/prefetch.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/hrtimer.h>
 #include <linux/of.h>
 
 #include <asm/io.h>
@@ -213,6 +214,14 @@
 #define LOG2_PERIODIC_SIZE  5   /* arbitrary; this matches OHCI */
 #define PERIODIC_SIZE       (1 << LOG2_PERIODIC_SIZE)
 
+/*
+ * The UE11 SIE keeps generating the USB 1 ms SOF packets in hardware, but
+ * delivering one Linux interrupt for every SOF overwhelms the 40 MHz CPU.
+ * HID input remains responsive at 125 Hz, so use an 8 ms software schedule
+ * for interrupt endpoints and keep SOF interrupts masked.
+ */
+#define UE11_PERIODIC_QUANTUM_MS 8
+
 struct ue11 {
     spinlock_t          lock;
     void __iomem       *reg_base;
@@ -226,6 +235,7 @@ struct ue11 {
 
     /* sw model */
     struct timer_list   timer;
+	struct hrtimer      periodic_timer;
     struct ue11h_ep *   next_periodic;
     struct ue11h_ep *   next_async;
 
@@ -690,26 +700,6 @@ static void out_packet(struct ue11 *ue11, struct ue11h_ep *ep, struct urb *urb)
     ep->length = len;
 }
 //-----------------------------------------------------------------
-// enable_sof_interrupt: 
-//-----------------------------------------------------------------
-static inline void enable_sof_interrupt(struct ue11 *ue11)
-{
-    if (ue11->irq_enable & (1 << USB_IRQ_MASK_SOF_SHIFT))
-        return;
-    USB_LOG(USBLOG_INFO, ("USB: Enable SOF\n"));
-    ue11->irq_enable |= (1 << USB_IRQ_MASK_SOF_SHIFT);
-}
-//-----------------------------------------------------------------
-// disable_sof_interrupt: 
-//-----------------------------------------------------------------
-static inline void disable_sof_interrupt(struct ue11 *ue11)
-{
-    if (!(ue11->irq_enable & (1 << USB_IRQ_MASK_SOF_SHIFT)))
-        return;
-    USB_LOG(USBLOG_INFO, ("USB: Disable SOF\n"));
-    ue11->irq_enable &= ~(1 << USB_IRQ_MASK_SOF_SHIFT);
-}
-//-----------------------------------------------------------------
 // start_transfer: Pick the next endpoint for a transaction, and issue it.
 // frames start with periodic transfers (after whatever is pending
 // from the previous frame), and the rest of the time is async
@@ -791,6 +781,41 @@ static void start_transfer(struct ue11 *ue11)
     ue11->active_transfer  = ep;
     ue11->active_start     = (jiffies + MIN_JIFFIES);
 }
+
+static enum hrtimer_restart ue11h_periodic_timer(struct hrtimer *timer)
+{
+	struct ue11 *ue11 = container_of(timer, struct ue11, periodic_timer);
+	unsigned long flags;
+	unsigned int index;
+	bool restart;
+
+	spin_lock_irqsave(&ue11->lock, flags);
+
+	restart = ue11->periodic_count &&
+		  (ue11->port1 & USB_PORT_STAT_ENABLE) &&
+		  HC_IS_RUNNING(ue11_to_hcd(ue11)->state);
+	if (!restart)
+		goto out;
+
+	index = ue11->frame++ % PERIODIC_SIZE;
+	ue11->stat_sof++;
+
+	if (ue11->next_periodic)
+		ue11->stat_overrun++;
+	if (ue11->periodic[index])
+		ue11->next_periodic = ue11->periodic[index];
+
+	start_transfer(ue11);
+
+out:
+	spin_unlock_irqrestore(&ue11->lock, flags);
+
+	if (!restart)
+		return HRTIMER_NORESTART;
+
+	hrtimer_forward_now(timer, ms_to_ktime(UE11_PERIODIC_QUANTUM_MS));
+	return HRTIMER_RESTART;
+}
 //-----------------------------------------------------------------
 // finish_request
 //-----------------------------------------------------------------
@@ -840,16 +865,15 @@ static void finish_request(
             *prev = ep->next;
         ue11->load[i] -= ep->load;
     }
-    ep->branch = PERIODIC_SIZE;
-    ue11->periodic_count--;
-    ue11_to_hcd(ue11)->self.bandwidth_allocated
-        -= ep->load / ep->period;
-    if (ep == ue11->next_periodic)
-        ue11->next_periodic = ep->next;
+	ep->branch = PERIODIC_SIZE;
+	ue11->periodic_count--;
+	ue11_to_hcd(ue11)->self.bandwidth_allocated -=
+		ep->load / (ep->period * UE11_PERIODIC_QUANTUM_MS);
+	if (ep == ue11->next_periodic)
+		ue11->next_periodic = ep->next;
 
-    /* we might turn SOFs back on again for the async schedule */
-    if (ue11->periodic_count == 0)
-        disable_sof_interrupt(ue11);
+	if (ue11->periodic_count == 0)
+		hrtimer_try_to_cancel(&ue11->periodic_timer);
 }
 
 static void ue11_shutdown_active_transfer(struct ue11 *ue11)
@@ -1150,25 +1174,6 @@ static irqreturn_t ue11h_irq(struct usb_hcd *hcd)
         ue11->stat_a++;
     }
 
-    // IRQ: Start of frame interrupt
-    if (irqstat & (1 << USB_IRQ_STS_SOF_SHIFT))
-    {
-        unsigned index;
-
-        index = ue11->frame++ % PERIODIC_SIZE;
-        ue11->stat_sof++;
-
-        /* be graceful about almost-inevitable periodic schedule
-         * overruns:  continue the previous frame's transfers iff
-         * this one has nothing scheduled.
-         */
-        if (ue11->next_periodic)
-            ue11->stat_overrun++;
-
-        if (ue11->periodic[index])
-            ue11->next_periodic = ue11->periodic[index];
-    }
-
     if (irqstat)
     {
         if (ue11->port1 & USB_PORT_STAT_ENABLE)
@@ -1176,8 +1181,6 @@ static irqreturn_t ue11h_irq(struct usb_hcd *hcd)
         ret = IRQ_HANDLED;
     }
 
-    if (ue11->periodic_count == 0 && list_empty(&ue11->async))
-        disable_sof_interrupt(ue11);
     writel(ue11->irq_enable, ue11->reg_base + USB_IRQ_MASK);
 
     spin_unlock(&ue11->lock);
@@ -1232,6 +1235,7 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
     unsigned long       flags;
     int                 i;
 	int                 retval = 0;
+	unsigned int        poll_interval;
     struct usb_host_endpoint    *hep = urb->ep;
 
     USB_LOG(USBLOG_INFO, ("USB: URB queue %p\n", urb));
@@ -1305,9 +1309,11 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
         {
         case PIPE_ISOCHRONOUS:
         case PIPE_INTERRUPT:
-            if (urb->interval > PERIODIC_SIZE)
-                urb->interval = PERIODIC_SIZE;
-            ep->period = urb->interval;
+			poll_interval = max_t(unsigned int, urb->interval,
+					      UE11_PERIODIC_QUANTUM_MS);
+			ep->period = DIV_ROUND_UP(poll_interval, UE11_PERIODIC_QUANTUM_MS);
+			if (ep->period > PERIODIC_SIZE)
+				ep->period = PERIODIC_SIZE;
             ep->branch = PERIODIC_SIZE;
             ep->load = usb_calc_bus_time(udev->speed, !is_out,
                 (type == PIPE_ISOCHRONOUS),
@@ -1330,7 +1336,7 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
         break;
     case PIPE_ISOCHRONOUS:
     case PIPE_INTERRUPT:
-        urb->interval = ep->period;
+		urb->interval = ep->period * UE11_PERIODIC_QUANTUM_MS;
         if (ep->branch < PERIODIC_SIZE)
         {
             /* NOTE:  the phase is correct here, but the value
@@ -1338,8 +1344,9 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
              * All current drivers ignore start_frame, so this
              * is unlikely to ever matter...
              */
-            urb->start_frame = (ue11->frame & (PERIODIC_SIZE - 1))
-                        + ep->branch;
+			urb->start_frame =
+				((ue11->frame & (PERIODIC_SIZE - 1)) +
+				 ep->branch) * UE11_PERIODIC_QUANTUM_MS;
             break;
         }
 
@@ -1348,8 +1355,9 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
             goto fail;
         ep->branch = retval;
         retval = 0;
-        urb->start_frame = (ue11->frame & (PERIODIC_SIZE - 1))
-                    + ep->branch;
+		urb->start_frame =
+			((ue11->frame & (PERIODIC_SIZE - 1)) + ep->branch) *
+			UE11_PERIODIC_QUANTUM_MS;
 
         /* sort each schedule branch by period (slow before fast)
          * to share the faster parts of the tree without needing
@@ -1375,8 +1383,12 @@ static int ue11h_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_fla
             ue11->load[i] += ep->load;
         }
         ue11->periodic_count++;
-        hcd->self.bandwidth_allocated += ep->load / ep->period;
-        enable_sof_interrupt(ue11);
+		hcd->self.bandwidth_allocated +=
+			ep->load / (ep->period * UE11_PERIODIC_QUANTUM_MS);
+		if (ue11->periodic_count == 1)
+			hrtimer_start(&ue11->periodic_timer,
+				      ms_to_ktime(UE11_PERIODIC_QUANTUM_MS),
+				      HRTIMER_MODE_REL);
     }
 
     urb->hcpriv = hep;
@@ -1475,7 +1487,7 @@ static int ue11h_get_frame(struct usb_hcd *hcd)
      * never matches the on-the-wire frame;
      * subject to overruns.
      */
-    return ue11->frame;
+	return ue11->frame * UE11_PERIODIC_QUANTUM_MS;
 }
 //-----------------------------------------------------------------
 // ue11h_hub_status_data: Virtual root hub port status check
@@ -1734,6 +1746,7 @@ static void ue11h_stop(struct usb_hcd *hcd)
 
     del_timer_sync(&hcd->rh_timer);
     del_timer_sync(&ue11->timer);
+	hrtimer_cancel(&ue11->periodic_timer);
 
     spin_lock_irqsave(&ue11->lock, flags);
     port_power(ue11, 0);
@@ -1847,6 +1860,8 @@ static int ue11h_probe(struct platform_device *dev)
     spin_lock_init(&ue11->lock);
     INIT_LIST_HEAD(&ue11->async);
     timer_setup(&ue11->timer, ue11h_timer, 0);
+	hrtimer_init(&ue11->periodic_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	ue11->periodic_timer.function = ue11h_periodic_timer;
     ue11->reg_base = dev_base;
     hcd->product_desc = "UltraEmbedded USB Full-Speed host";
 

@@ -40,6 +40,13 @@ disabled until a real Full-Speed attachment completes reset, limits every RX
 copy to both the current packet and the URB buffer, drains excess RX bytes,
 and completes an active URB with `-ESHUTDOWN` on disconnect.
 
+After reset, the SIE continues to transmit the USB-required SOF packet every
+1 ms. Its SOF interrupt remains masked because delivering 1000 SOF interrupts
+per second can starve the timer and userspace on the 40 MHz CPU. The HCD uses
+an 8 ms high-resolution timer for the software periodic schedule instead.
+Interrupt URBs therefore report and use a minimum 8 ms interval, which gives
+HID devices a 125 Hz polling rate without changing the USB wire protocol.
+
 The current pure SpinalHDL CPU writes `intrpt[7:0]` to `ESTAT[9:2]` but always
 enters at `EENTRY`; it does not apply the `ECFG.VS` hardware-vector offset.
 The LoongArch32 fallback dispatcher therefore handles ECFG IP5 and IP6,
@@ -92,6 +99,13 @@ and the Fluxbox desktop must remain running after the capture.
 The USB controller interrupt counter must increase during enumeration and
 interrupt polling. A successful Linux boot without a USB descriptor, HID
 input node, or event record is not a successful mouse validation.
+
+Also compare the USB and timer interrupt counters over five seconds. With the
+two-interface receiver used for validation, each active interrupt endpoint
+should complete about 625 transactions in that interval. A USB increase near
+50,000 while the timer advances only tens of times indicates that SOF
+interrupts are still enabled and the system is not usable, even if HID events
+eventually appear.
 
 Connection detection also needs a negative test. Boot once with no USB
 device attached, wait at least two root-hub polling periods, and require that
