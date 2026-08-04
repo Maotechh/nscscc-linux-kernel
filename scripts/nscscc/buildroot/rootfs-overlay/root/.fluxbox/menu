@@ -2,6 +2,7 @@
   [exec] (Terminal) {xterm -fa "DejaVu Sans Mono" -fs 9}
   [exec] (Kernel messages) {xterm -fa "DejaVu Sans Mono" -fs 9 -e sh -c "dmesg | less"}
   [exec] (Network status) {xterm -fa "DejaVu Sans Mono" -fs 9 -e sh -c "ip addr; echo; cat /proc/interrupts; read line"}
+  [exec] (Restore wallpaper) {feh --no-fehbg --bg-fill /usr/share/backgrounds/nscscc-hatsune-miku.jpg}
   [separator]
   [restart] (Restart Fluxbox)
   [exit] (Exit desktop)

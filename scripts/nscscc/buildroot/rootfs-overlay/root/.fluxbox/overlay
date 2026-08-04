@@ -1,0 +1,2 @@
+! Keep the root pixmap installed by feh when Fluxbox applies its style.
+background: none

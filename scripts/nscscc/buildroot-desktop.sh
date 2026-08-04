@@ -35,6 +35,10 @@ config_dir=${script_dir}/buildroot
 defconfig=${config_dir}/nscscc_desktop_defconfig
 overlay_source=${config_dir}/rootfs-overlay
 post_build_script=${config_dir}/post-build-desktop.sh
+wallpaper_relative=usr/share/backgrounds/nscscc-hatsune-miku.jpg
+wallpaper_source=${overlay_source}/${wallpaper_relative}
+wallpaper_original_sha256=55167d74d99e7d78f9c9ae4b2445ac180af7eecc3ba5f1d89c7083f43e172cf4
+wallpaper_expected_sha256=d358f208dbe0af79e6ecd9f30839a68c5a7bb912922b9b2ff1f0344cc32cff30
 
 buildroot_commit=3ebc7c69d56430c34eba4c869d1d4fe4d1e8de55
 patch_repo_commit=5b73cf2f9247502fc16835f14c6a4c3edc0e88e9
@@ -68,12 +72,18 @@ if [[ ${reuse_output} != 0 && ${reuse_output} != 1 ]]; then
 	echo "NSCSCC_REUSE_OUTPUT must be 0 or 1" >&2
 	exit 1
 fi
-for path in "${defconfig}" "${overlay_source}" "${post_build_script}"; do
+for path in "${defconfig}" "${overlay_source}" "${post_build_script}" \
+	"${wallpaper_source}"; do
 	if [[ ! -e ${path} ]]; then
 		echo "Required desktop input is missing: ${path}" >&2
 		exit 1
 	fi
 done
+actual_wallpaper_sha256=$(sha256sum "${wallpaper_source}" | awk '{print $1}')
+if [[ ${actual_wallpaper_sha256} != "${wallpaper_expected_sha256}" ]]; then
+	echo "Wallpaper hash mismatch: ${wallpaper_source}" >&2
+	exit 1
+fi
 
 cross_compile=${toolchain_dir}/bin/loongarch32r-linux-gnusf-
 for tool in gcc readelf strip; do
@@ -133,11 +143,17 @@ if [[ ${reuse_output} == 0 ]]; then
 	mkdir -p "${output_dir}" "${overlay_dir}"
 	cp -a "${overlay_source}/." "${overlay_dir}/"
 	mkdir -p "${overlay_dir}/etc/nscscc"
+	wallpaper_size=$(stat -c '%s' "${wallpaper_source}")
+	wallpaper_sha256=$(sha256sum "${wallpaper_source}" | awk '{print $1}')
 	cat >"${overlay_dir}/etc/nscscc/desktop-build-info" <<EOF
 BUILDROOT_COMMIT=${buildroot_commit}
 PATCHED_BUILDROOT_TREE=${patched_buildroot_tree}
 JIT_THU_PATCH_REPO_COMMIT=${patch_repo_commit}
-DESKTOP_STACK=Xorg-fbdev-evdev-Fluxbox-XTerm
+DESKTOP_STACK=Xorg-fbdev-evdev-Fluxbox-XTerm-Feh
+WALLPAPER=/${wallpaper_relative}
+WALLPAPER_SIZE=${wallpaper_size}
+WALLPAPER_SHA256=${wallpaper_sha256}
+WALLPAPER_ORIGINAL_SHA256=${wallpaper_original_sha256}
 USBUTILS_LINK_LIBRARIES=libusb-1.0,libudev
 EOF
 	chmod 0755 \
@@ -177,10 +193,14 @@ for path in "${rootfs_cpio}" "${rootfs_tar}" \
 	"${target_dir}/usr/bin/lsusb" \
 	"${target_dir}/usr/bin/Xorg" "${target_dir}/usr/bin/xinit" \
 	"${target_dir}/usr/bin/fluxbox" "${target_dir}/usr/bin/xterm" \
+	"${target_dir}/usr/bin/feh" \
+	"${target_dir}/usr/lib/libImlib2.so.1" \
+	"${target_dir}/usr/lib/imlib2/loaders/jpeg.so" \
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so" \
 	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so" \
 	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so" \
 	"${target_dir}/usr/lib/xorg/modules/libshadow.so" \
+	"${target_dir}/${wallpaper_relative}" \
 	"${target_dir}/etc/nscscc/desktop-build-info"; do
 	if [[ ! -e ${path} ]]; then
 		echo "Desktop build output is missing: ${path}" >&2
@@ -221,6 +241,9 @@ runtime_paths=(
 	"${target_dir}/usr/bin/lsusb"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
+	"${target_dir}/usr/bin/feh"
+	"${target_dir}/usr/lib/libImlib2.so.1"
+	"${target_dir}/usr/lib/imlib2/loaders/jpeg.so"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
 	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so"
 	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so"
@@ -286,7 +309,10 @@ overlay_sha256=$(tar --sort=name --mtime=@0 --owner=0 --group=0 \
 busybox_source_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
 busybox_config_sha256=$(sha256sum "${busybox_build_dir}/.config" | awk '{print $1}')
 busybox_size=$(stat -c '%s' "${target_dir}/bin/busybox")
-component_names=(busybox xorg evtest lsusb fluxbox xterm fbdev evdev fbdevhw shadow)
+wallpaper_path=${target_dir}/${wallpaper_relative}
+wallpaper_size=$(stat -c '%s' "${wallpaper_path}")
+wallpaper_sha256=$(sha256sum "${wallpaper_path}" | awk '{print $1}')
+component_names=(busybox xorg evtest lsusb fluxbox xterm feh imlib2 imlib2_jpeg fbdev evdev fbdevhw shadow)
 component_paths=(
 	"${target_dir}/bin/busybox"
 	"${target_dir}/usr/bin/Xorg"
@@ -294,6 +320,9 @@ component_paths=(
 	"${target_dir}/usr/bin/lsusb"
 	"${target_dir}/usr/bin/fluxbox"
 	"${target_dir}/usr/bin/xterm"
+	"${target_dir}/usr/bin/feh"
+	"${target_dir}/usr/lib/libImlib2.so.1"
+	"${target_dir}/usr/lib/imlib2/loaders/jpeg.so"
 	"${target_dir}/usr/lib/xorg/modules/drivers/fbdev_drv.so"
 	"${target_dir}/usr/lib/xorg/modules/input/evdev_drv.so"
 	"${target_dir}/usr/lib/xorg/modules/libfbdevhw.so"
@@ -342,6 +371,11 @@ busybox_elf_machine=${busybox_machine}
 busybox_sha256=${busybox_sha256}
 usbutils_version=${usbutils_version}
 usbutils_link_libraries=libusb-1.0,libudev
+wallpaper=/${wallpaper_relative}
+wallpaper_size=${wallpaper_size}
+wallpaper_sha256=${wallpaper_sha256}
+wallpaper_original_sha256=${wallpaper_original_sha256}
+wallpaper_source_sha256=${wallpaper_expected_sha256}
 build_host_arch=$(uname -m)
 toolchain=${toolchain_dir}
 toolchain_version=${toolchain_version}
@@ -373,6 +407,15 @@ fluxbox_sha256=${fluxbox_sha256}
 xterm_elf_class=${xterm_class}
 xterm_elf_machine=${xterm_machine}
 xterm_sha256=${xterm_sha256}
+feh_elf_class=${feh_class}
+feh_elf_machine=${feh_machine}
+feh_sha256=${feh_sha256}
+imlib2_elf_class=${imlib2_class}
+imlib2_elf_machine=${imlib2_machine}
+imlib2_sha256=${imlib2_sha256}
+imlib2_jpeg_elf_class=${imlib2_jpeg_class}
+imlib2_jpeg_elf_machine=${imlib2_jpeg_machine}
+imlib2_jpeg_sha256=${imlib2_jpeg_sha256}
 fbdev_elf_class=${fbdev_class}
 fbdev_elf_machine=${fbdev_machine}
 fbdev_sha256=${fbdev_sha256}

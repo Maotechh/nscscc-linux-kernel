@@ -13,6 +13,7 @@ constraints.  The desktop image therefore uses the following software:
 - Fluxbox as the window manager, toolbar, workspace manager, and application
   menu;
 - XTerm with Xft, Fontconfig, and DejaVu Sans Mono;
+- Feh with Imlib2's JPEG loader for the persistent desktop wallpaper;
 - eudev for dynamic input-device discovery.
 
 This provides the desktop operations needed on the board: pointer-driven
@@ -93,13 +94,31 @@ The kernel helper adds the NSCSCC init and diagnostic files without removing
 the Xorg, Fluxbox, eudev, font, or desktop-start files from the Buildroot
 target.
 
+## Persistence and wallpaper
+
+The TFTP kernel contains an initramfs and does not write changes back to the
+host. Files created or edited on the running experiment box disappear after a
+restart. Persistent changes belong in the Buildroot overlay or another tracked
+build input, followed by a new root filesystem and kernel build.
+
+The desktop overlay installs a 480 by 800 JPEG at
+`/usr/share/backgrounds/nscscc-hatsune-miku.jpg`. It is a centered crop of the
+user-provided 1942 by 4665 JPEG, whose original SHA256 is
+`55167d74d99e7d78f9c9ae4b2445ac180af7eecc3ba5f1d89c7083f43e172cf4`.
+The supplied filename identifies the artwork as drawn by `nun_nu`. The
+optimized asset is decoded by Feh once when X starts. Fluxbox's overlay keeps
+the selected style from replacing the root pixmap. The desktop build manifest
+and `/etc/nscscc/desktop-build-info` record the installed wallpaper SHA256 and
+size.
+
 ## Startup and diagnosis
 
 SysV init starts the static `10.90.50.44/24` network configuration and then
-starts Xorg on `/dev/fb0`.  Fluxbox and one XTerm are started by
-`/root/.xinitrc`.  Xorg is not started when `/dev/fb0` is absent, so a missing
-framebuffer does not prevent the serial shell from working.  The post-build
-step removes Buildroot's generic `S40xorg` service because
+starts Xorg on `/dev/fb0`. Feh installs the wallpaper, then Fluxbox and one
+XTerm are started by `/root/.xinitrc`. Xorg is not started when `/dev/fb0` is
+absent, so a missing framebuffer does not prevent the serial shell from
+working. The post-build step removes Buildroot's generic `S40xorg` service
+because
 `S99nscscc-desktop` is the sole owner of Xorg startup and logging.
 The Xorg configuration explicitly loads `fbdevhw` and `shadow` before the
 fbdev video driver.  The LA32R module loader otherwise rejects
