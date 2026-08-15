@@ -1,18 +1,44 @@
 #!/bin/sh
 
+interface=eth0
+ip_cidr=10.90.50.44/24
+network_ready=/run/nscscc-network-ready
+
+start_network()
+{
+	ip link set "${interface}" up
+	if ip addr show dev "${interface}" | grep -Fq "inet ${ip_cidr} "; then
+		mkdir -p /run
+		: >"${network_ready}"
+		echo "NSCSCC network is already configured."
+		return 0
+	fi
+
+	ip addr flush dev "${interface}"
+	ip addr add "${ip_cidr}" dev "${interface}"
+	mkdir -p /run
+	: >"${network_ready}"
+}
+
+stop_network()
+{
+	if ip link show "${interface}" >/dev/null 2>&1; then
+		ip addr flush dev "${interface}"
+		ip link set "${interface}" down
+	fi
+	rm -f "${network_ready}"
+}
+
 case "$1" in
     start)
-        ip link set eth0 up
-        ip addr flush dev eth0
-        ip addr add 10.90.50.44/24 dev eth0
+        start_network
         ;;
     stop)
-        ip addr flush dev eth0
-        ip link set eth0 down
+        stop_network
         ;;
     restart)
-        "$0" stop
-        "$0" start
+        stop_network
+        start_network
         ;;
     *)
         echo "Usage: $0 {start|stop|restart}" >&2

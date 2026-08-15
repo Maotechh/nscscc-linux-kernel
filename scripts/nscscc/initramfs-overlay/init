@@ -5,10 +5,60 @@ export PATH
 
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
 mkdir -p /dev/pts /dev/shm /proc /run /sys /tmp
+mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run 2>/dev/null || true
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devpts devpts /dev/pts 2>/dev/null || true
 
 exec </dev/console >/dev/console 2>&1
+
+nfsroot_spec=
+nfsroot_opts=vers=3,tcp
+if [ -r /proc/cmdline ]; then
+	for argument in $(cat /proc/cmdline); do
+		case "${argument}" in
+			nscscc.nfsroot=*)
+				nfsroot_spec=${argument#nscscc.nfsroot=}
+				;;
+			nscscc.nfsopts=*)
+				nfsroot_opts=${argument#nscscc.nfsopts=}
+				;;
+		esac
+	done
+fi
+
+if [ -n "${nfsroot_spec}" ]; then
+	case "${nfsroot_spec}" in
+		*:*)
+			;;
+		*)
+			echo "Invalid nscscc.nfsroot value: ${nfsroot_spec}" >&2
+			nfsroot_spec=
+			;;
+	esac
+fi
+
+if [ -n "${nfsroot_spec}" ]; then
+	[ -n "${nfsroot_opts}" ] || nfsroot_opts=vers=3,tcp
+	echo "NSCSCC NFS root requested: ${nfsroot_spec}"
+	if /etc/init.d/S40network start; then
+		mkdir -p /newroot
+		if mount -t nfs -o "${nfsroot_opts}" "${nfsroot_spec}" /newroot; then
+			if [ -x /newroot/sbin/init ]; then
+				echo "Switching to NFS root ${nfsroot_spec}."
+				switch_root /newroot /sbin/init
+				echo "switch_root returned unexpectedly; using initramfs." >&2
+			else
+				echo "NFS root has no executable /sbin/init; using initramfs." >&2
+			fi
+			umount /newroot 2>/dev/null || true
+		else
+			echo "Cannot mount NFS root; using initramfs." >&2
+		fi
+	else
+		echo "Cannot configure network for NFS root; using initramfs." >&2
+	fi
+fi
+
 exec /sbin/init
 

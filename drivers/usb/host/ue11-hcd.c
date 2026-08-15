@@ -1810,8 +1810,11 @@ static int ue11h_remove(struct platform_device *dev)
 {
     struct usb_hcd      *hcd = platform_get_drvdata(dev);
 
+	device_wakeup_disable(hcd->self.controller);
     usb_remove_hcd(hcd);
+	platform_set_drvdata(dev, NULL);
     usb_put_hcd(hcd);
+
     return 0;
 }
 //-----------------------------------------------------------------
@@ -1886,6 +1889,8 @@ static int ue11h_probe(struct platform_device *dev)
     {
         goto err6;
     }
+
+	platform_set_drvdata(dev, hcd);
 
     device_wakeup_enable(hcd->self.controller);
 

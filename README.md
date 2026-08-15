@@ -18,6 +18,8 @@ DMFE、confreg、NT35510 framebuffer、PS/2 和 USB Full-Speed 控制器。
 - PS/2 serio、keyboard 和 mouse protocol 支持，以及 Linux evdev 接口。
 - UE11 USB Full-Speed host、USB HID、`hid-generic`、`hidraw`、evdev 和
   Buildroot `usbutils`／`evtest`，用于 USB 鼠标接收器和 X.Org 输入。
+- 可选的 NFSv3 root 启动方式。内核仍然保留 recovery initramfs，网络或者
+  NFS mount 失败时继续进入原有串口 shell。
 - build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
   manifest，便于校验不同主机之间的文件身份。
 
@@ -67,6 +69,20 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
 - 官方技术方案确认 Linux 成功启动对应系统测试 15 分；20 分等级所需的指定
   操作明细尚未发布，因此当前没有声明已经完成全部 20 分条件。
 
+2026-08-15 的离线 Linux 更新：
+
+- 内核加入 IPv4 autoconfiguration、NFSv2/v3 client 和 root NFS 支持，NFSv4
+  保持禁用。
+- `/init` 支持 `nscscc.nfsroot=` 和 `nscscc.nfsopts=`，成功 mount 后通过
+  `switch_root` 运行远端 root filesystem，失败时保留 recovery shell。
+- Buildroot 与 initramfs 的 network service 会保留已经配置的 `eth0` 地址，
+  避免 `switch_root` 后重新 flush NFS root 正在使用的接口。
+- 静态 BusyBox 配置加入 NFS mount 支持。initramfs 和 kernel manifest 记录
+  实际嵌入的 BusyBox commit、config SHA256 和 binary SHA256。
+- 修正 UE11 platform driver 的 driver data 注册和 remove lifecycle。
+- 新增 NFS root 离线检查，校验 kernel config、BusyBox config、initramfs 内容
+  及 BusyBox identity。以上更新尚未进行 FPGA 实物验证。
+
 本次更新已完成交叉编译和静态检查。PS/2 key event、USB enumeration、mouse
 event 和 disconnect 行为仍需要在后续单独进行实物验证。
 
@@ -78,6 +94,13 @@ Reduced GCC 8.3 toolchain：
 ```bash
 export ARCH=loongarch
 export CROSS_COMPILE=/path/to/toolchain/bin/loongarch32r-linux-gnusf-
+
+scripts/nscscc/build-busybox.sh \
+  /absolute/path/to/clean-busybox-1.33-source \
+  /absolute/path/to/busybox-output \
+  /absolute/path/to/busybox-artifacts/busybox
+
+export NSCSCC_BUSYBOX=/absolute/path/to/busybox-artifacts/busybox
 
 scripts/nscscc/buildroot-desktop.sh \
   /absolute/path/to/buildroot-work \
@@ -92,6 +115,8 @@ scripts/nscscc/build-kernel.sh \
 
 桌面 image 的构建细节、Buildroot patch identity、runtime loader 处理和
 initramfs 约束见 [`Documentation/nscscc/desktop-buildroot.md`](Documentation/nscscc/desktop-buildroot.md)。
+可选 NFS root 的启动参数、server 设置和离线检查见
+[`Documentation/nscscc/nfs-root.md`](Documentation/nscscc/nfs-root.md)。
 USB RTL、kernel、HID 和 input event 的映射及验证方法见
 [`Documentation/nscscc/usb-hid.md`](Documentation/nscscc/usb-hid.md)。
 当前 USB bitstream 的 Chiplab patch、RTL 与约束文件 SHA256、routed
@@ -153,6 +178,8 @@ artifact contract 见
 - 当前 USB revision 已通过 EPYC2 的 LoongArch32 Reduced 全量 kernel build、
   `W=1` object build 和 `vmlinux` symbol 检查，但按当前要求没有连接实验箱，
   因此没有宣称 USB descriptor、HID event 或 disconnect 实物验证已经通过。
+- NFS root 已通过 kernel、BusyBox、initramfs 和 identity 离线检查，但尚未在
+  实验箱上验证 DMFE、NFSv3 mount 和 `switch_root`。
 
 ## 依赖
 

@@ -31,7 +31,7 @@ cross_compile=${CROSS_COMPILE:-}
 build_jobs=${NSCSCC_BUILD_JOBS:-$(nproc)}
 expected_commit=${NSCSCC_BUSYBOX_COMMIT:-db726ae0c61ffec6b58e19749e0c63aaaf4f6989}
 config=${NSCSCC_BUSYBOX_CONFIG:-${script_dir}/busybox-1.33.config}
-expected_config_sha256=71f6ee381f177f4722c522753f79095a571ec22637ee222d0ca9219b0b5f9975
+expected_config_sha256=a58ef57fb65f95f5e69cb9d7d09d0bd4a2f910c85e0b453a9907f72e369df814
 
 if [[ -z ${cross_compile} ]]; then
 	echo "CROSS_COMPILE is required" >&2

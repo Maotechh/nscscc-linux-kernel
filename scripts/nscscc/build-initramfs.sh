@@ -86,7 +86,8 @@ fi
 # Keep every applet used by the initramfs scripts and validation commands
 # available when the imported root filesystem has only a subset of links.
 required_busybox_applets=(
-	cat chmod dmesg grep hostname ls mkdir mount ping sync tail umount uname
+	cat chmod dmesg grep hostname ls mkdir mount ping rm switch_root sync tail
+	umount uname
 )
 for applet in "${required_busybox_applets[@]}"; do
 	path=${rootfs}/bin/${applet}
@@ -130,16 +131,30 @@ kernel_commit=unknown
 if git -C "${script_dir}/../.." rev-parse --verify HEAD >/dev/null 2>&1; then
 	kernel_commit=$(git -C "${script_dir}/../.." rev-parse HEAD)
 fi
-busybox_sha256=$(sha256sum "${rootfs}/bin/busybox" | awk '{print $1}')
+busybox_source=${busybox_override:-${base_rootfs}/bin/busybox}
+busybox_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
 busybox_origin=base-rootfs
 if [[ -n ${busybox_override} ]]; then
 	busybox_origin=override
+fi
+busybox_commit=unknown
+busybox_config_sha256=unknown
+busybox_manifest_sha256=unavailable
+if [[ -f ${busybox_source}.manifest ]]; then
+	busybox_manifest_sha256=$(sha256sum "${busybox_source}.manifest" | awk '{print $1}')
+	busybox_commit=$(awk -F= '$1 == "busybox_commit" {print substr($0, index($0, "=") + 1); exit}' "${busybox_source}.manifest")
+	busybox_config_sha256=$(awk -F= '$1 == "config_sha256" {print substr($0, index($0, "=") + 1); exit}' "${busybox_source}.manifest")
+	busybox_commit=${busybox_commit:-unknown}
+	busybox_config_sha256=${busybox_config_sha256:-unknown}
 fi
 
 cat >"${rootfs}/etc/nscscc/build-info" <<EOF
 KERNEL_SOURCE_COMMIT=${kernel_commit}
 BUSYBOX_ORIGIN=${busybox_origin}
+BUSYBOX_COMMIT=${busybox_commit}
+BUSYBOX_CONFIG_SHA256=${busybox_config_sha256}
 BUSYBOX_SHA256=${busybox_sha256}
+BUSYBOX_MANIFEST_SHA256=${busybox_manifest_sha256}
 SOURCE_DATE_EPOCH=${source_date_epoch}
 EOF
 

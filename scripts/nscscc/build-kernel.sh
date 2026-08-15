@@ -191,8 +191,23 @@ kernel_config_sha256=$(sha256sum "${build_dir}/.config" | awk '{print $1}')
 initramfs_size=$(stat -c '%s' "${initramfs}")
 initramfs_sha256=$(sha256sum "${initramfs}" | awk '{print $1}')
 base_rootfs_bytes=$(du -sb "${base_rootfs}" | awk '{print $1}')
-busybox_size=$(stat -c '%s' "${base_rootfs}/bin/busybox")
-busybox_sha256=$(sha256sum "${base_rootfs}/bin/busybox" | awk '{print $1}')
+busybox_source=${NSCSCC_BUSYBOX:-${base_rootfs}/bin/busybox}
+busybox_origin=base-rootfs
+if [[ -n ${NSCSCC_BUSYBOX:-} ]]; then
+	busybox_origin=override
+fi
+busybox_size=$(stat -c '%s' "${busybox_source}")
+busybox_sha256=$(sha256sum "${busybox_source}" | awk '{print $1}')
+busybox_manifest_sha256=unavailable
+busybox_commit=unknown
+busybox_config_sha256=unknown
+if [[ -f ${busybox_source}.manifest ]]; then
+	busybox_manifest_sha256=$(sha256sum "${busybox_source}.manifest" | awk '{print $1}')
+	busybox_commit=$(awk -F= '$1 == "busybox_commit" {print substr($0, index($0, "=") + 1); exit}' "${busybox_source}.manifest")
+	busybox_config_sha256=$(awk -F= '$1 == "config_sha256" {print substr($0, index($0, "=") + 1); exit}' "${busybox_source}.manifest")
+	busybox_commit=${busybox_commit:-unknown}
+	busybox_config_sha256=${busybox_config_sha256:-unknown}
+fi
 desktop_build_info=${base_rootfs}/etc/nscscc/desktop-build-info
 desktop_build_info_sha256=unavailable
 if [[ -f ${desktop_build_info} ]]; then
@@ -228,6 +243,11 @@ debug_sha256=${debug_sha256}
 kernel_config_sha256=${kernel_config_sha256}
 base_rootfs=${base_rootfs}
 base_rootfs_bytes=${base_rootfs_bytes}
+busybox_origin=${busybox_origin}
+busybox_source=${busybox_source}
+busybox_commit=${busybox_commit}
+busybox_config_sha256=${busybox_config_sha256}
+busybox_manifest_sha256=${busybox_manifest_sha256}
 busybox_size=${busybox_size}
 busybox_sha256=${busybox_sha256}
 desktop_build_info_sha256=${desktop_build_info_sha256}
