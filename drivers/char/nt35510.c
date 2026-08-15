@@ -33,7 +33,7 @@
 #define BYTES_PER_PIXEL 2
 #define NT35510_DEFAULT_XRES 480
 #define NT35510_DEFAULT_YRES 800
-#define NT35510_DEFAULT_DEFIO_HZ 20
+#define NT35510_DEFAULT_DEFIO_HZ 50
 
 static int majorNumber;
 static struct class *nt35510_class;
@@ -530,9 +530,16 @@ static void nt35510_flush_rect_locked(struct nt35510_drvdata *drvdata,
 	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2C00);
 	for (y = y0; y <= y1; y++) {
 		for (x = x0; x <= x1; x++)
-			nt35510_out32(drvdata, NT35510_DATA_OFFSET,
-					pixels[y * drvdata->xres + x]);
+			writel_relaxed(pixels[y * drvdata->xres + x],
+					drvdata->regs + (NT35510_DATA_OFFSET << 2));
 	}
+	/*
+	 * The pixel port is a register-based FIFO.  Relaxed MMIO writes to the
+	 * same ioremap() peripheral retain program order, while avoiding a full
+	 * LoongArch dbar before every pixel.  Order the completed stream before
+	 * another caller can acquire the mutex and program a new window.
+	 */
+	wmb();
 }
 
 static void nt35510_flush_rows_locked(struct nt35510_drvdata *drvdata,

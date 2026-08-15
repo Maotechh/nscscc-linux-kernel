@@ -26,8 +26,9 @@ desktop indexing, and other services that are not practical in 128 MiB.
 `CONFIG_CHIPLAB_NT35510` registers both the existing `/dev/nt35510`
 diagnostic character device and an RGB565 framebuffer at `/dev/fb0`.  The
 framebuffer is 480 by 800 pixels and supports the standard read, write,
-ioctl, drawing, and mmap paths.  Xorg writes to a shadow framebuffer through
-mmap.  Linux deferred I/O converts dirty pages to LCD row updates.
+ioctl, drawing, and mmap paths.  Xorg maps this kernel-owned framebuffer and
+writes to it directly with `ShadowFB` disabled.  Linux deferred I/O converts
+dirty pages to LCD row updates at up to 50 updates per second.
 
 The existing character-device interface remains available for full-frame
 hardware tests.  Both interfaces share the same shadow buffer and LCD
@@ -37,6 +38,22 @@ The kernel configuration enables `CONFIG_INPUT_EVDEV`, PS/2 keyboard and
 mouse protocol handlers, `CONFIG_SERIO_ALTERA_PS2`, the UE11 USB host,
 generic USB HID, and `hidraw`. Xorg discovers every `/dev/input/event*`
 keyboard and pointer through eudev.
+
+The original Xorg configuration enabled its own ShadowFB allocation even
+though the NT35510 driver already keeps a 768000-byte vmalloc framebuffer.
+That arrangement copied every damaged region from Xorg's allocation into
+`/dev/fb0` before the kernel could send it to the controller.  Direct fbdev
+rendering removes the extra allocation and copy.  The framebuffer remains a
+deferred-I/O mapping, so mmap writes still reach the panel through the kernel
+driver rather than bypassing it.
+
+The LCD pixel register is a FIFO.  Control and initialization writes continue
+to use ordered `iowrite32()`.  Only the consecutive pixel stream uses
+`writel_relaxed()`, followed by one `wmb()` before releasing the driver mutex.
+Linux documents that relaxed accesses from one CPU thread to the same default
+`ioremap()` peripheral remain ordered relative to one another.  On this
+LoongArch tree, the change removes one full `dbar 0` from each pixel write
+without changing the controller command sequence.
 
 ## Reproducible root filesystem build
 
@@ -120,9 +137,10 @@ absent, so a missing framebuffer does not prevent the serial shell from
 working. The post-build step removes Buildroot's generic `S40xorg` service
 because
 `S99nscscc-desktop` is the sole owner of Xorg startup and logging.
-The Xorg configuration explicitly loads `fbdevhw` and `shadow` before the
-fbdev video driver.  The LA32R module loader otherwise rejects
-`fbdev_drv.so` before that driver can request its own helper modules.
+The Xorg configuration explicitly loads `fbdevhw` before the fbdev video
+driver.  The LA32R module loader otherwise rejects `fbdev_drv.so` before that
+driver can request its helper module.  `ShadowFB` is explicitly false and the
+unused shadow module is not preloaded.
 
 Runtime state is available through:
 
@@ -155,3 +173,8 @@ Successful creation of `/dev/fb0` and successful Xorg startup verify the
 software interface.  They do not prove that the physical LCD displays an
 image.  A separate visual observation is required after the panel or LCD
 hardware path is replaced.
+
+The direct-rendering and relaxed-MMIO changes have compile and simulator
+coverage only until a later hardware run records Xorg startup, pointer events,
+framebuffer updates, and a direct panel observation.  The simulator does not
+model the NT35510 controller.

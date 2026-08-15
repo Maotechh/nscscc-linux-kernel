@@ -30,10 +30,15 @@ the current SoC without adding the corresponding controllers.
 
 The public history includes LA32 DMA support, DMFE fixes, LS1A NAND support,
 cache maintenance, SoC UART and GMAC interrupt corrections, kernel modules,
-loop devices, Btrfs, file locking, inotify and IKCONFIG. The current
-`la32_defconfig` already contains the applicable features, including DMFE,
-MII, LS1A NAND, modules, loop, Btrfs, file locking, inotify and IKCONFIG.
-These changes should not be copied again.
+loop devices, Btrfs, file locking, inotify and IKCONFIG. The general
+`la32_defconfig` contains these options, but some are not connected in the
+current device tree and need not be built into the contest image.
+
+The JIT-THU 2024 Chiplab patches use PREEMPT, NO_HZ_IDLE and HZ=250, later
+remove SCTP and unused PHY drivers, and add an NFS root configuration. Their
+Xilinx accelerated framebuffer requires a different framebuffer and two DMA
+controllers. It remains a useful implementation reference, but it does not
+accelerate the current NT35510 FIFO.
 
 ### LainChip
 
@@ -140,6 +145,23 @@ artifact completed two independent boots from FPGA programming through the
 Linux checks. The BusyBox and initramfs inputs also completed byte-for-byte
 rebuild checks. The current post-NFS revision has passed offline builds and
 shell tests but has not replaced that earlier hardware evidence.
+
+`la32_nscscc_defconfig` is the board-specific build profile. It retains NFSv3,
+DMFE, confreg, NT35510, PS/2, UE11, USB HID and the scheduler settings above.
+It also enables USB mass storage with SCSI disk support plus ext4, FAT and
+VFAT. It omits XFS, Btrfs, NTFS, IPMI, SCTP, the RAID6 benchmark, and drivers
+for SATA, STMMAC, PCMCIA, CFI NOR, wireless, IR, PPS and the alternate Xilinx
+framebuffer that are absent from the active device tree. The USB HID receiver
+does not use the kernel wireless networking stack. Xorg uses evdev directly,
+so the legacy mousedev compatibility interface is also unnecessary.
+`scripts/nscscc/validate-kernel-config.sh` checks these requirements after
+Kconfig dependency resolution and before compiling the kernel.
+
+With the same minimal initramfs, toolchain and CEMU harness, this profile
+reached `/ #` at guest time 0.540 seconds instead of 1.348 seconds, increased
+available boot memory by 3148 KiB, and reduced the raw kernel by 3177440
+bytes. See `Documentation/nscscc/cemu-validation.md` for artifact identities,
+comparison conditions, and simulator limits.
 
 ## Later features
 

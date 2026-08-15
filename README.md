@@ -22,6 +22,8 @@ DMFE、confreg、NT35510 framebuffer、PS/2 和 USB Full-Speed 控制器。
   NFS mount 失败时继续进入原有串口 shell。
 - build-info、kernel artifact、BusyBox、initramfs 和 ELF load address 的
   manifest，便于校验不同主机之间的文件身份。
+- 面向当前实验箱的 `la32_nscscc_defconfig`，以及在编译前检查
+  必要内建驱动和无关驱动的 config validator。
 
 PS/2 的 Chiplab patch、controller 来源、寄存器 ABI 和自动仿真说明见
 [`Documentation/nscscc/chiplab-ps2-controller.md`](Documentation/nscscc/chiplab-ps2-controller.md)。
@@ -98,6 +100,22 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
   首次配置、重复运行、已有地址、网卡缺失、配置失败以及
   `nscscc-check` 的成功与失败结果。
 
+2026-08-15 的 kernel profile 与显示性能更新：
+
+- `build-kernel.sh` 默认使用 `la32_nscscc_defconfig`，在 Kconfig 解析依赖后
+  运行 `validate-kernel-config.sh`。该 profile 保留 DMFE、NFSv3 root、
+  confreg、NT35510、PS/2、UE11、USB HID、USB storage、ext4 和 VFAT，
+  并禁用当前 DTS 没有的 SATA、STMMAC、PCMCIA、wireless、IR 和
+  Xilinx framebuffer driver。
+- NT35510 连续 pixel FIFO 写入改用 `writel_relaxed()`，每个 rectangle
+  结束前执行一次 `wmb()`；deferred-I/O 上限从 20 Hz 调整为
+  50 Hz。Xorg 禁用额外 ShadowFB，直接使用 kernel framebuffer。
+- CEMU 使用同一个最小 initramfs 对比通用配置和新 profile。
+  新 profile 在两次相同运行中均于 guest `0.540 s` 进入 `/ #`，
+  启动时可用内存增加 `3148 KiB`，raw kernel 减少
+  `3177440` 字节。详细条件和限制见
+  [`Documentation/nscscc/cemu-validation.md`](Documentation/nscscc/cemu-validation.md)。
+
 本次更新已完成交叉编译和静态检查。PS/2 key event、USB enumeration、mouse
 event 和 disconnect 行为仍需要在后续单独进行实物验证。
 
@@ -129,6 +147,10 @@ scripts/nscscc/build-kernel.sh \
 
 scripts/nscscc/test-userspace-services.sh
 ```
+
+`build-kernel.sh` 默认使用 `la32_nscscc_defconfig`。可以通过
+`NSCSCC_DEFCONFIG` 选择其他 profile，但最终 `.config` 仍必须通过
+`scripts/nscscc/validate-kernel-config.sh`。
 
 桌面 image 的构建细节、Buildroot patch identity、runtime loader 处理和
 initramfs 约束见 [`Documentation/nscscc/desktop-buildroot.md`](Documentation/nscscc/desktop-buildroot.md)。
@@ -197,6 +219,10 @@ artifact contract 见
   因此没有宣称 USB descriptor、HID event 或 disconnect 实物验证已经通过。
 - NFS root 已通过 kernel、BusyBox、initramfs 和 identity 离线检查，但尚未在
   实验箱上验证 DMFE、NFSv3 mount 和 `switch_root`。
+- 新 defconfig、NT35510 relaxed MMIO、50 Hz deferred-I/O 和 Xorg direct
+  framebuffer 配置已通过交叉编译与 CEMU shell 检查，尚未进行
+  FPGA 实物性能测量。CEMU 不模拟 USB、DMFE、PS/2 或 NT35510
+  设备行为。
 
 ## 依赖
 

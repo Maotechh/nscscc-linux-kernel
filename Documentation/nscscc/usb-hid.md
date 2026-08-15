@@ -46,6 +46,9 @@ per second can starve the timer and userspace on the 40 MHz CPU. The HCD uses
 an 8 ms high-resolution timer for the software periodic schedule instead.
 Interrupt URBs therefore report and use a minimum 8 ms interval, which gives
 HID devices a 125 Hz polling rate without changing the USB wire protocol.
+Linux USB core rounds a Full-Speed interrupt endpoint interval down to a power
+of two before calling the HCD.  A receiver descriptor requesting 10 ms thus
+reaches UE11 as 8 ms; the driver does not turn that request into 16 ms.
 
 The current pure SpinalHDL CPU writes `intrpt[7:0]` to `ESTAT[9:2]` but always
 enters at `EENTRY`; it does not apply the `ECFG.VS` hardware-vector offset.
@@ -106,6 +109,15 @@ should complete about 625 transactions in that interval. A USB increase near
 50,000 while the timer advances only tens of times indicates that SOF
 interrupts are still enabled and the system is not usable, even if HID events
 eventually appear.
+
+The previously recorded receiver data showed about 125 completed interrupt
+transactions per second on each of its two endpoints.  Consequently, a mouse
+cursor that changes only about once per second should be investigated after
+the input event node: compare `evtest` timestamps with Xorg and framebuffer
+updates.  It is not evidence that the USB interrupt endpoint itself is polling
+once per second.  The current desktop configuration removes Xorg's additional
+ShadowFB copy, while the NT35510 driver replaces one ordered MMIO barrier per
+pixel with one barrier per flushed rectangle.
 
 Connection detection also needs a negative test. Boot once with no USB
 device attached, wait at least two root-hub polling periods, and require that

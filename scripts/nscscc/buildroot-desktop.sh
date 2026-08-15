@@ -259,8 +259,12 @@ for path in "${runtime_paths[@]}"; do
 		awk -F'[][]' '/NEEDED/{print $2}')
 done
 if ! grep -Fq 'Load "fbdevhw"' "${target_dir}/etc/X11/xorg.conf" ||
-	! grep -Fq 'Load "shadow"' "${target_dir}/etc/X11/xorg.conf"; then
-	echo "Xorg config must preload fbdevhw and shadow before fbdev_drv.so" >&2
+	! grep -Fq 'Option "ShadowFB" "false"' "${target_dir}/etc/X11/xorg.conf"; then
+	echo "Xorg must use fbdevhw and render directly to /dev/fb0" >&2
+	exit 1
+fi
+if grep -Fq 'Load "shadow"' "${target_dir}/etc/X11/xorg.conf"; then
+	echo "Xorg must not preload the unused shadow framebuffer module" >&2
 	exit 1
 fi
 

@@ -13,7 +13,7 @@ LoongArch32 Reduced toolchain prefix.
 Environment variables:
   ARCH                    Kernel architecture (default: loongarch)
   CROSS_COMPILE           Required toolchain prefix
-  NSCSCC_DEFCONFIG        Kernel defconfig (default: la32_defconfig)
+  NSCSCC_DEFCONFIG        Kernel defconfig (default: la32_nscscc_defconfig)
   NSCSCC_BUILD_JOBS       Parallel build jobs (default: nproc)
   NSCSCC_ARTIFACT_NAME    TFTP file name (default: vmlinux-<commit>)
   NSCSCC_EXPECT_LOAD      Expected first PT_LOAD address (default: 0xa0300000)
@@ -37,7 +37,7 @@ build_dir=$2
 artifact_dir=$3
 arch=${ARCH:-loongarch}
 cross_compile=${CROSS_COMPILE:-}
-defconfig=${NSCSCC_DEFCONFIG:-la32_defconfig}
+defconfig=${NSCSCC_DEFCONFIG:-la32_nscscc_defconfig}
 build_jobs=${NSCSCC_BUILD_JOBS:-$(nproc)}
 expect_load=${NSCSCC_EXPECT_LOAD:-0xa0300000}
 ddr_end=${NSCSCC_DDR_END:-0xa8000000}
@@ -69,7 +69,8 @@ kbuild_user=${KBUILD_BUILD_USER:-nscscc}
 kbuild_host=${KBUILD_BUILD_HOST:-nscscc-build}
 kbuild_version=${KBUILD_BUILD_VERSION:-1}
 
-for path in Makefile scripts/config scripts/nscscc/build-initramfs.sh; do
+for path in Makefile scripts/config scripts/nscscc/build-initramfs.sh \
+		scripts/nscscc/validate-kernel-config.sh; do
 	if [[ ! -e ${source_dir}/${path} ]]; then
 		echo "Run from an NSCSCC kernel source tree; missing ${path}" >&2
 		exit 1
@@ -102,6 +103,8 @@ make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	--set-str INITRAMFS_SOURCE "${initramfs_config_source}"
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	CROSS_COMPILE="${cross_compile}" olddefconfig
+"${source_dir}/scripts/nscscc/validate-kernel-config.sh" \
+	"${build_dir}/.config"
 make -C "${source_dir}" O="${build_dir}" ARCH="${arch}" \
 	CROSS_COMPILE="${cross_compile}" \
 	KBUILD_BUILD_TIMESTAMP="${kbuild_timestamp}" \
