@@ -67,8 +67,10 @@ if grep -E '^(MemTotal|MemFree|MemAvailable):' "${proc_root}/meminfo"; then
 			fail "MemTotal is not numeric"
 			;;
 		*)
-			if [ "${memtotal}" -ge 110000 ]; then
+			if [ "${memtotal}" -ge 110000 ] && [ "${memtotal}" -le 131072 ]; then
 				pass "MemTotal is consistent with 128 MiB DDR"
+			elif [ "${memtotal}" -gt 131072 ]; then
+				fail "MemTotal is above 131072 kB: ${memtotal} kB"
 			else
 				fail "MemTotal is below 110000 kB: ${memtotal} kB"
 			fi
@@ -101,6 +103,19 @@ if [ "${network_available}" -eq 1 ]; then
 		pass "${INTERFACE} carrier"
 	else
 		fail "${INTERFACE} carrier is not 1"
+	fi
+
+	if address_output=$(ip addr show "${INTERFACE}" 2>&1); then
+		echo "${address_output}"
+		if printf '%s\n' "${address_output}" |
+			grep -Eq 'inet [^[:space:]]+ scope global'; then
+			pass "${INTERFACE} has a global IPv4 address"
+		else
+			fail "${INTERFACE} has no global IPv4 address"
+		fi
+	else
+		echo "${address_output}" >&2
+		fail "cannot read ${INTERFACE} addresses"
 	fi
 
 	for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do

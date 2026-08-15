@@ -200,8 +200,41 @@ run_check_tests()
 		NSCSCC_ROOT=${root} NSCSCC_PATH=${mock_bin}:/usr/bin:/bin \
 		"${nscscc_check}" >"${output}" 2>&1
 	assert_contains "${output}" 'PASS: MemTotal is consistent with 128 MiB DDR'
+	assert_contains "${output}" 'PASS: eth0 has a global IPv4 address'
 	assert_contains "${output}" 'PASS: eth0 interrupt counter increased from 10 to 13'
 	assert_contains "${output}" 'nscscc_check=pass'
+
+	cat >"${root}/proc/meminfo" <<'EOF'
+MemTotal:         262144 kB
+MemFree:           64000 kB
+MemAvailable:      72000 kB
+EOF
+	cat >"${root}/proc/interrupts" <<'EOF'
+           CPU0
+ 18:         10  LoongArch   2  eth0
+EOF
+	if MOCK_LOG=${mock_log} MOCK_ROOT=${root} MOCK_INTERFACE_STATE=existing \
+		NSCSCC_ROOT=${root} NSCSCC_PATH=${mock_bin}:/usr/bin:/bin \
+		"${nscscc_check}" >"${output}" 2>&1; then
+		fail 'nscscc-check accepted a memory size above the 128 MiB DDR range'
+	fi
+	assert_contains "${output}" 'FAIL: MemTotal is above 131072 kB: 262144 kB'
+
+	cat >"${root}/proc/meminfo" <<'EOF'
+MemTotal:         115596 kB
+MemFree:           64000 kB
+MemAvailable:      72000 kB
+EOF
+	cat >"${root}/proc/interrupts" <<'EOF'
+           CPU0
+ 18:         10  LoongArch   2  eth0
+EOF
+	if MOCK_LOG=${mock_log} MOCK_ROOT=${root} MOCK_INTERFACE_STATE=none \
+		NSCSCC_ROOT=${root} NSCSCC_PATH=${mock_bin}:/usr/bin:/bin \
+		"${nscscc_check}" >"${output}" 2>&1; then
+		fail 'nscscc-check accepted an interface without a global IPv4 address'
+	fi
+	assert_contains "${output}" 'FAIL: eth0 has no global IPv4 address'
 
 	cat >"${root}/proc/interrupts" <<'EOF'
            CPU0

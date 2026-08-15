@@ -90,8 +90,9 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
   网卡。显式 `restart` 仍然会使用 `network.conf` 中的静态地址。
 - 网卡不存在、link 配置失败或 IPv4 地址添加失败时，服务返回
   非零状态，不会写入错误的 ready marker。
-- `nscscc-check` 现在校验 build identity、DDR 容量、可配置网卡、
-  carrier、RX/TX error counter、ping、DMFE interrupt 增量和 confreg 输入。
+- `nscscc-check` 现在校验 build identity、128 MiB DDR 范围、可配置网卡的
+  global IPv4 地址、carrier、RX/TX error counter、ping、DMFE interrupt
+  增量和 confreg 输入。
   任意必要检查失败时，命令返回非零状态。
 - `scripts/nscscc/test-userspace-services.sh` 通过 host shell mock 覆盖网络
   首次配置、重复运行、已有地址、网卡缺失、配置失败以及
