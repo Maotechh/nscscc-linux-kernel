@@ -216,6 +216,11 @@ desktop_build_info_sha256=unavailable
 if [[ -f ${desktop_build_info} ]]; then
 	desktop_build_info_sha256=$(sha256sum "${desktop_build_info}" | awk '{print $1}')
 fi
+xorg_config=${base_rootfs}/etc/X11/xorg.conf
+xorg_config_sha256=unavailable
+if [[ -f ${xorg_config} ]]; then
+	xorg_config_sha256=$(sha256sum "${xorg_config}" | awk '{print $1}')
+fi
 toolchain_version=$("${cross_compile}gcc" -dumpfullversion -dumpversion)
 toolchain_gcc_sha256=$(sha256sum "$(command -v "${cross_compile}gcc")" | awk '{print $1}')
 crc32=$(python3 - "${tftp_artifact}" <<'PY'
@@ -254,6 +259,7 @@ busybox_manifest_sha256=${busybox_manifest_sha256}
 busybox_size=${busybox_size}
 busybox_sha256=${busybox_sha256}
 desktop_build_info_sha256=${desktop_build_info_sha256}
+xorg_config_sha256=${xorg_config_sha256}
 initramfs=${initramfs}
 initramfs_repeat=${initramfs_repeat}
 initramfs_config_source=${initramfs_config_source}

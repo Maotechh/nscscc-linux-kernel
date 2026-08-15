@@ -37,6 +37,7 @@ overlay_source=${config_dir}/rootfs-overlay
 post_build_script=${config_dir}/post-build-desktop.sh
 wallpaper_relative=usr/share/backgrounds/nscscc-hatsune-miku.jpg
 wallpaper_source=${overlay_source}/${wallpaper_relative}
+xorg_config_source=${overlay_source}/etc/X11/xorg.conf
 wallpaper_original_sha256=55167d74d99e7d78f9c9ae4b2445ac180af7eecc3ba5f1d89c7083f43e172cf4
 wallpaper_expected_sha256=d358f208dbe0af79e6ecd9f30839a68c5a7bb912922b9b2ff1f0344cc32cff30
 
@@ -73,7 +74,7 @@ if [[ ${reuse_output} != 0 && ${reuse_output} != 1 ]]; then
 	exit 1
 fi
 for path in "${defconfig}" "${overlay_source}" "${post_build_script}" \
-	"${wallpaper_source}"; do
+	"${wallpaper_source}" "${xorg_config_source}"; do
 	if [[ ! -e ${path} ]]; then
 		echo "Required desktop input is missing: ${path}" >&2
 		exit 1
@@ -84,6 +85,7 @@ if [[ ${actual_wallpaper_sha256} != "${wallpaper_expected_sha256}" ]]; then
 	echo "Wallpaper hash mismatch: ${wallpaper_source}" >&2
 	exit 1
 fi
+xorg_config_sha256=$(sha256sum "${xorg_config_source}" | awk '{print $1}')
 
 cross_compile=${toolchain_dir}/bin/loongarch32r-linux-gnusf-
 for tool in gcc readelf strip; do
@@ -154,6 +156,7 @@ WALLPAPER=/${wallpaper_relative}
 WALLPAPER_SIZE=${wallpaper_size}
 WALLPAPER_SHA256=${wallpaper_sha256}
 WALLPAPER_ORIGINAL_SHA256=${wallpaper_original_sha256}
+XORG_CONFIG_SHA256=${xorg_config_sha256}
 USBUTILS_LINK_LIBRARIES=libusb-1.0,libudev
 EOF
 	chmod 0755 \
@@ -258,12 +261,18 @@ for path in "${runtime_paths[@]}"; do
 	done < <("${cross_compile}readelf" -d "${path}" |
 		awk -F'[][]' '/NEEDED/{print $2}')
 done
-if ! grep -Fq 'Load "fbdevhw"' "${target_dir}/etc/X11/xorg.conf" ||
-	! grep -Fq 'Option "ShadowFB" "false"' "${target_dir}/etc/X11/xorg.conf"; then
+target_xorg_config=${target_dir}/etc/X11/xorg.conf
+target_xorg_config_sha256=$(sha256sum "${target_xorg_config}" | awk '{print $1}')
+if [[ ${target_xorg_config_sha256} != "${xorg_config_sha256}" ]]; then
+	echo "Target Xorg config does not match the rootfs overlay" >&2
+	exit 1
+fi
+if ! grep -Fq 'Load "fbdevhw"' "${target_xorg_config}" ||
+	! grep -Fq 'Option "ShadowFB" "false"' "${target_xorg_config}"; then
 	echo "Xorg must use fbdevhw and render directly to /dev/fb0" >&2
 	exit 1
 fi
-if grep -Fq 'Load "shadow"' "${target_dir}/etc/X11/xorg.conf"; then
+if grep -Fq 'Load "shadow"' "${target_xorg_config}"; then
 	echo "Xorg must not preload the unused shadow framebuffer module" >&2
 	exit 1
 fi
@@ -364,6 +373,8 @@ post_build_script=${post_build_script}
 post_build_script_sha256=${post_build_sha256}
 overlay=${overlay_source}
 overlay_sha256=${overlay_sha256}
+xorg_config=${xorg_config_source}
+xorg_config_sha256=${xorg_config_sha256}
 busybox_version=${busybox_version}
 busybox_source=${busybox_source}
 busybox_source_sha256=${busybox_source_sha256}

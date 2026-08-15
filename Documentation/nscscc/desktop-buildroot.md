@@ -140,7 +140,9 @@ because
 The Xorg configuration explicitly loads `fbdevhw` before the fbdev video
 driver.  The LA32R module loader otherwise rejects `fbdev_drv.so` before that
 driver can request its helper module.  `ShadowFB` is explicitly false and the
-unused shadow module is not preloaded.
+unused shadow module is not preloaded.  The Buildroot and kernel manifests
+record the final `xorg.conf` SHA256, and the desktop build rejects a target
+whose configuration differs from the source overlay.
 
 Runtime state is available through:
 
