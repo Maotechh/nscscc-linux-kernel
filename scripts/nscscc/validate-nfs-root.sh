@@ -43,6 +43,8 @@ fi
 
 required_options=(
 	CONFIG_IP_PNP=y
+	CONFIG_IP_PNP_DHCP=y
+	CONFIG_IP_PNP_BOOTP=y
 	CONFIG_NFS_FS=y
 	CONFIG_NFS_V3=y
 	CONFIG_ROOT_NFS=y
@@ -60,6 +62,7 @@ entries=${work_dir}/entries.txt
 gzip -dc "${initramfs}" | cpio -it >"${entries}" 2>"${work_dir}/cpio.log"
 
 required_entries=(
+	bin/awk
 	bin/busybox
 	bin/mount
 	bin/switch_root
@@ -67,6 +70,7 @@ required_entries=(
 	etc/init.d/S40network
 	etc/init.d/S41nscscc-network
 	init
+	usr/bin/nscscc-check
 )
 for entry in "${required_entries[@]}"; do
 	if ! grep -Fqx "${entry}" "${entries}"; then

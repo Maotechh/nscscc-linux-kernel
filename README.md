@@ -83,6 +83,20 @@ validation commit `7236be01b06768938ad1439209256f2aa966ad62`：
 - 新增 NFS root 离线检查，校验 kernel config、BusyBox config、initramfs 内容
   及 BusyBox identity。以上更新尚未进行 FPGA 实物验证。
 
+2026-08-15 的网络与自检更新：
+
+- initramfs 和 Buildroot 网络服务保留 kernel、DHCP 或 BOOTP 已经
+  配置的 global IPv4 地址，避免 NFS root 前后重新配置正在使用的
+  网卡。显式 `restart` 仍然会使用 `network.conf` 中的静态地址。
+- 网卡不存在、link 配置失败或 IPv4 地址添加失败时，服务返回
+  非零状态，不会写入错误的 ready marker。
+- `nscscc-check` 现在校验 build identity、DDR 容量、可配置网卡、
+  carrier、RX/TX error counter、ping、DMFE interrupt 增量和 confreg 输入。
+  任意必要检查失败时，命令返回非零状态。
+- `scripts/nscscc/test-userspace-services.sh` 通过 host shell mock 覆盖网络
+  首次配置、重复运行、已有地址、网卡缺失、配置失败以及
+  `nscscc-check` 的成功与失败结果。
+
 本次更新已完成交叉编译和静态检查。PS/2 key event、USB enumeration、mouse
 event 和 disconnect 行为仍需要在后续单独进行实物验证。
 
@@ -111,6 +125,8 @@ scripts/nscscc/build-kernel.sh \
   /absolute/path/to/buildroot-work/output/target \
   /absolute/path/to/kernel-output \
   /absolute/path/to/kernel-artifacts
+
+scripts/nscscc/test-userspace-services.sh
 ```
 
 桌面 image 的构建细节、Buildroot patch identity、runtime loader 处理和

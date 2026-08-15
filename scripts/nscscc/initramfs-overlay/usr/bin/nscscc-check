@@ -1,44 +1,167 @@
 #!/bin/sh
 
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-config=/etc/nscscc/network.conf
+PATH=${NSCSCC_PATH:-/sbin:/bin:/usr/sbin:/usr/bin}
+root=${NSCSCC_ROOT:-}
+config=${root}/etc/nscscc/network.conf
+build_info=${root}/etc/nscscc/build-info
+proc_root=${root}/proc
+sys_root=${root}/sys
+
+INTERFACE=eth0
 SERVER_IP=10.90.50.43
 [ -r "${config}" ] && . "${config}"
 
-echo "=== basic commands ==="
-if ! command -v ls; then
-	echo "ls is not available on PATH" >&2
-	exit 1
+failures=0
+
+pass()
+{
+	echo "PASS: $*"
+}
+
+fail()
+{
+	echo "FAIL: $*" >&2
+	failures=$((failures + 1))
+}
+
+read_statistic()
+{
+	cat "${sys_root}/class/net/${INTERFACE}/statistics/$1"
+}
+
+interrupt_count()
+{
+	awk -v interface="${INTERFACE}" '
+		$NF == interface { print $2; found = 1; exit }
+		END { if (!found) exit 1 }
+	' "${proc_root}/interrupts"
+}
+
+echo "=== build identity ==="
+if [ -r "${build_info}" ]; then
+	cat "${build_info}"
+	pass "build identity is present"
+else
+	fail "${build_info} is unavailable"
 fi
-ls -la / || exit 1
+
+echo "=== basic commands ==="
+if command -v ls >/dev/null 2>&1 && ls -la "${root:-/}"; then
+	pass "basic filesystem commands"
+else
+	fail "ls is unavailable or failed"
+fi
 
 echo "=== kernel ==="
-uname -a
+if uname -a; then
+	pass "uname"
+else
+	fail "uname"
+fi
 
 echo "=== memory ==="
-grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo
+if grep -E '^(MemTotal|MemFree|MemAvailable):' "${proc_root}/meminfo"; then
+	memtotal=$(awk '$1 == "MemTotal:" { print $2; exit }' "${proc_root}/meminfo")
+	case "${memtotal}" in
+		''|*[!0-9]*)
+			fail "MemTotal is not numeric"
+			;;
+		*)
+			if [ "${memtotal}" -ge 110000 ]; then
+				pass "MemTotal is consistent with 128 MiB DDR"
+			else
+				fail "MemTotal is below 110000 kB: ${memtotal} kB"
+			fi
+			;;
+	esac
+else
+	fail "memory information"
+fi
 
 echo "=== filesystems ==="
-mount
+if mount; then
+	pass "mount table"
+else
+	fail "mount table"
+fi
 
 echo "=== network ==="
-ip addr show
-if [ -r /sys/class/net/eth0/carrier ]; then
-	echo "eth0 carrier: $(cat /sys/class/net/eth0/carrier)"
+network_available=0
+if ip link show "${INTERFACE}" >/dev/null 2>&1; then
+	network_available=1
+	ip addr show "${INTERFACE}"
+	pass "network interface ${INTERFACE}"
+else
+	fail "network interface ${INTERFACE} is unavailable"
 fi
-for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do
-	path="/sys/class/net/eth0/statistics/${statistic}"
-	[ -r "${path}" ] && echo "eth0 ${statistic}: $(cat "${path}")"
-done
+
+if [ "${network_available}" -eq 1 ]; then
+	carrier_path=${sys_root}/class/net/${INTERFACE}/carrier
+	if [ -r "${carrier_path}" ] && [ "$(cat "${carrier_path}")" = 1 ]; then
+		pass "${INTERFACE} carrier"
+	else
+		fail "${INTERFACE} carrier is not 1"
+	fi
+
+	for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do
+		path=${sys_root}/class/net/${INTERFACE}/statistics/${statistic}
+		if [ -r "${path}" ]; then
+			echo "${INTERFACE} ${statistic}: $(cat "${path}")"
+		else
+			fail "missing ${INTERFACE} statistic: ${statistic}"
+		fi
+	done
+
+	rx_errors=$(read_statistic rx_errors 2>/dev/null || echo unavailable)
+	tx_errors=$(read_statistic tx_errors 2>/dev/null || echo unavailable)
+	if [ "${rx_errors}" = 0 ] && [ "${tx_errors}" = 0 ]; then
+		pass "${INTERFACE} error counters are zero"
+	else
+		fail "${INTERFACE} errors: rx=${rx_errors}, tx=${tx_errors}"
+	fi
+fi
 
 echo "=== interrupts before ping ==="
-cat /proc/interrupts
+cat "${proc_root}/interrupts"
+irq_before=$(interrupt_count 2>/dev/null || echo unavailable)
 
 echo "=== ping ${SERVER_IP} ==="
-ping -c 3 -W 2 "${SERVER_IP}" || true
+if [ "${network_available}" -eq 1 ] && ping -c 3 -W 2 "${SERVER_IP}"; then
+	pass "ping ${SERVER_IP}"
+else
+	fail "ping ${SERVER_IP}"
+fi
 
 echo "=== interrupts after ping ==="
-cat /proc/interrupts
+cat "${proc_root}/interrupts"
+irq_after=$(interrupt_count 2>/dev/null || echo unavailable)
+case "${irq_before}:${irq_after}" in
+	*[!0-9:]*|:*)
+		fail "cannot read ${INTERFACE} interrupt counter"
+		;;
+	*)
+		if [ "${irq_after}" -gt "${irq_before}" ]; then
+			pass "${INTERFACE} interrupt counter increased from ${irq_before} to ${irq_after}"
+		else
+			fail "${INTERFACE} interrupt counter did not increase: ${irq_before} to ${irq_after}"
+		fi
+		;;
+esac
+
+echo "=== board inputs ==="
+if nscscc-board read; then
+	pass "confreg input read"
+else
+	fail "confreg input read"
+fi
 
 echo "=== recent kernel messages ==="
 dmesg | tail -80
+
+if [ "${failures}" -eq 0 ]; then
+	echo "nscscc_check=pass"
+	exit 0
+fi
+
+echo "nscscc_check=fail failures=${failures}" >&2
+exit 1

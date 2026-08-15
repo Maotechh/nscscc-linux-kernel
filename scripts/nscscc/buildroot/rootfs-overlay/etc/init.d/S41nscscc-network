@@ -1,22 +1,31 @@
 #!/bin/sh
 
+PATH=${NSCSCC_PATH:-/sbin:/bin:/usr/sbin:/usr/bin}
+root=${NSCSCC_ROOT:-}
+
 interface=eth0
 ip_cidr=10.90.50.44/24
-network_ready=/run/nscscc-network-ready
+network_ready=${root}/run/nscscc-network-ready
 
 start_network()
 {
-	ip link set "${interface}" up
-	if ip addr show dev "${interface}" | grep -Fq "inet ${ip_cidr} "; then
-		mkdir -p /run
+	if ! ip link show "${interface}" >/dev/null 2>&1; then
+		echo "Network interface not found: ${interface}" >&2
+		return 1
+	fi
+
+	ip link set "${interface}" up || return 1
+	if ip addr show dev "${interface}" |
+		grep -Eq 'inet [^[:space:]]+ scope global'; then
+		mkdir -p "${root}/run"
 		: >"${network_ready}"
-		echo "NSCSCC network is already configured."
+		echo "Preserving existing IPv4 configuration on ${interface}."
 		return 0
 	fi
 
-	ip addr flush dev "${interface}"
-	ip addr add "${ip_cidr}" dev "${interface}"
-	mkdir -p /run
+	ip addr flush dev "${interface}" || return 1
+	ip addr add "${ip_cidr}" dev "${interface}" || return 1
+	mkdir -p "${root}/run"
 	: >"${network_ready}"
 }
 

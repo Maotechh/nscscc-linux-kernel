@@ -86,8 +86,8 @@ fi
 # Keep every applet used by the initramfs scripts and validation commands
 # available when the imported root filesystem has only a subset of links.
 required_busybox_applets=(
-	cat chmod dmesg grep hostname ls mkdir mount ping rm switch_root sync tail
-	umount uname
+	awk cat chmod dmesg grep hostname ls mkdir mount ping rm sleep
+	switch_root sync tail umount uname
 )
 for applet in "${required_busybox_applets[@]}"; do
 	path=${rootfs}/bin/${applet}
