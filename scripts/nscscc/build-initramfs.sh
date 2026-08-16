@@ -41,8 +41,8 @@ if [[ ! -d ${base_rootfs} ]]; then
 	exit 1
 fi
 
-for path in init etc/inittab etc/init.d/rcS etc/init.d/S40network; do
-	if [[ ! -f ${overlay_dir}/${path} ]]; then
+for path in init etc/inittab etc/init.d/rcS etc/init.d/S40network usr/bin/nscscc-board usr/bin/nscscc-check usr/bin/nscscc-demo usr/sbin/nscscc-net; do
+	if [[ ! -e ${overlay_dir}/${path} ]]; then
 		echo "Initramfs overlay is missing ${path}: ${overlay_dir}/${path}" >&2
 		exit 1
 	fi
@@ -83,11 +83,18 @@ if [[ -n ${busybox_override} ]]; then
 	chmod 0755 "${rootfs}/bin/busybox"
 fi
 
+# nscscc-demo and nscscc-check are intentionally the same program; keep a
+# stable demo name even if the overlay copy loses the symlink on a host.
+if [[ ! -e ${rootfs}/usr/bin/nscscc-demo ]]; then
+	ln -s nscscc-check "${rootfs}/usr/bin/nscscc-demo"
+fi
+
 # Keep every applet used by the initramfs scripts and validation commands
 # available when the imported root filesystem has only a subset of links.
 required_busybox_applets=(
-	cat chmod dmesg grep hostname ls mkdir mount ping rm switch_root sync tail
-	umount uname
+	awk cat chmod cmp cp dd df dmesg find free grep head hostname ifconfig
+	ls mkdir mknod mount mv pidof ping ps rm rmdir sed sleep stat switch_root
+	sync tail timeout touch tr umount uname uptime wc
 )
 for applet in "${required_busybox_applets[@]}"; do
 	path=${rootfs}/bin/${applet}
@@ -164,6 +171,7 @@ chmod 0755 \
 	"${rootfs}/etc/init.d/S40network" \
 	"${rootfs}/usr/bin/nscscc-board" \
 	"${rootfs}/usr/bin/nscscc-check" \
+	"${rootfs}/usr/bin/nscscc-demo" \
 	"${rootfs}/usr/sbin/nscscc-net"
 chmod 0644 \
 	"${rootfs}/etc/fstab" \

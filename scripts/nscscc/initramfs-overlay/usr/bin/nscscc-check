@@ -1,44 +1,359 @@
 #!/bin/sh
 
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-config=/etc/nscscc/network.conf
+PATH=${NSCSCC_PATH:-/sbin:/bin:/usr/sbin:/usr/bin}
+root=${NSCSCC_ROOT:-}
+config=${root}/etc/nscscc/network.conf
+build_info=${root}/etc/nscscc/build-info
+proc_root=${root}/proc
+sys_root=${root}/sys
+dev_root=${root}/dev
+
+INTERFACE=eth0
 SERVER_IP=10.90.50.43
+PING_COUNT=3
+PING_DEADLINE=2
+DEMO_LED=0x0000a55a
+DEMO_DISPLAY=0x20260815
+WORK_DIR=${root}/tmp/nscscc-check
 [ -r "${config}" ] && . "${config}"
 
-echo "=== basic commands ==="
-if ! command -v ls; then
-	echo "ls is not available on PATH" >&2
-	exit 1
-fi
-ls -la / || exit 1
+failures=0
 
-echo "=== kernel ==="
-uname -a
+pass()
+{
+	echo "PASS: $*"
+}
+
+fail()
+{
+	echo "FAIL: $*" >&2
+	failures=$((failures + 1))
+}
+
+read_statistic()
+{
+	cat "${sys_root}/class/net/${INTERFACE}/statistics/$1"
+}
+
+interrupt_count()
+{
+	awk -v interface="${INTERFACE}" '
+		$NF == interface { print $2; found = 1; exit }
+		END { if (!found) exit 1 }
+	' "${proc_root}/interrupts"
+}
+
+echo "=== build identity ==="
+if [ -r "${build_info}" ]; then
+	cat "${build_info}"
+	pass "build identity is present"
+else
+	fail "${build_info} is unavailable"
+fi
+
+echo "=== basic filesystem commands ==="
+if command -v ls >/dev/null 2>&1 && ls -la "${root:-/}"; then
+	pass "ls -la root directory"
+else
+	fail "ls is unavailable or failed"
+fi
+
+rm -rf "${WORK_DIR}" 2>/dev/null || true
+if mkdir -p "${WORK_DIR}/sub" 2>/dev/null; then
+	pass "mkdir -p ${WORK_DIR}/sub"
+else
+	fail "mkdir -p ${WORK_DIR}/sub"
+fi
+
+if echo nscscc-idempotent >"${WORK_DIR}/hello.txt" 2>/dev/null &&
+	[ "$(cat "${WORK_DIR}/hello.txt" 2>/dev/null)" = nscscc-idempotent ]; then
+	pass "file write and read"
+else
+	fail "file write and read"
+fi
+
+if command -v dd >/dev/null 2>&1 &&
+	dd if=/dev/zero of="${WORK_DIR}/zeros.bin" bs=512 count=2 2>/dev/null; then
+	set -- $(wc -c <"${WORK_DIR}/zeros.bin" 2>/dev/null)
+	size=$1
+	if [ "${size}" = 1024 ]; then
+		pass "dd file write (${size} bytes)"
+	else
+		fail "dd file size mismatch: ${size:-unreadable} bytes"
+	fi
+else
+	fail "dd file write"
+fi
+
+if cp "${WORK_DIR}/hello.txt" "${WORK_DIR}/sub/hello.copy" 2>/dev/null &&
+	cmp "${WORK_DIR}/hello.txt" "${WORK_DIR}/sub/hello.copy" >/dev/null 2>&1; then
+	pass "cp and cmp"
+else
+	fail "cp and cmp"
+fi
+
+if mv "${WORK_DIR}/sub/hello.copy" "${WORK_DIR}/sub/hello.moved" 2>/dev/null &&
+	[ -f "${WORK_DIR}/sub/hello.moved" ]; then
+	pass "mv"
+else
+	fail "mv"
+fi
+
+if ln -s hello.txt "${WORK_DIR}/hello.link" 2>/dev/null &&
+	[ "$(cat "${WORK_DIR}/hello.link" 2>/dev/null)" = nscscc-idempotent ]; then
+	pass "symlink"
+else
+	fail "symlink"
+fi
+
+if chmod 0755 "${WORK_DIR}/hello.txt" 2>/dev/null &&
+	[ -x "${WORK_DIR}/hello.txt" ]; then
+	pass "chmod"
+else
+	fail "chmod"
+fi
+
+if rm "${WORK_DIR}/sub/hello.moved" "${WORK_DIR}/hello.link" "${WORK_DIR}/hello.txt" 2>/dev/null &&
+	rmdir "${WORK_DIR}/sub" 2>/dev/null &&
+	rm -rf "${WORK_DIR}" 2>/dev/null; then
+	pass "rm and rmdir cleanup"
+else
+	fail "rm and rmdir cleanup"
+fi
+
+echo "=== kernel and process view ==="
+if uname -a; then
+	pass "uname"
+else
+	fail "uname"
+fi
+
+if command -v ps >/dev/null 2>&1; then
+	ps
+	if [ "${?}" -eq 0 ]; then
+		pass "process listing"
+	else
+		fail "process listing"
+	fi
+else
+	fail "ps is unavailable"
+fi
+
+if command -v pidof >/dev/null 2>&1; then
+	if pidof init >/dev/null 2>&1; then
+		pass "pidof init"
+	else
+		fail "pidof init found no init process"
+	fi
+else
+	fail "pidof is unavailable"
+fi
 
 echo "=== memory ==="
-grep -E '^(MemTotal|MemFree|MemAvailable):' /proc/meminfo
-
-echo "=== filesystems ==="
-mount
-
-echo "=== network ==="
-ip addr show
-if [ -r /sys/class/net/eth0/carrier ]; then
-	echo "eth0 carrier: $(cat /sys/class/net/eth0/carrier)"
+if grep -E '^(MemTotal|MemFree|MemAvailable):' "${proc_root}/meminfo"; then
+	memtotal=$(awk '$1 == "MemTotal:" { print $2; exit }' "${proc_root}/meminfo")
+	case "${memtotal}" in
+		''|*[!0-9]*)
+			fail "MemTotal is not numeric"
+			;;
+		*)
+			if [ "${memtotal}" -ge 110000 ]; then
+				pass "MemTotal is consistent with 128 MiB DDR"
+			else
+				fail "MemTotal is below 110000 kB: ${memtotal} kB"
+			fi
+			;;
+	esac
+else
+	fail "memory information"
 fi
-for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do
-	path="/sys/class/net/eth0/statistics/${statistic}"
-	[ -r "${path}" ] && echo "eth0 ${statistic}: $(cat "${path}")"
+
+echo "=== filesystems and mounts ==="
+if mount; then
+	pass "mount table"
+else
+	fail "mount table"
+fi
+
+if command -v df >/dev/null 2>&1 && df -h; then
+	pass "df -h"
+else
+	fail "df -h"
+fi
+
+echo "=== /proc and /sys reads ==="
+for proc_file in cmdline cpuinfo uptime filesystems devices; do
+	proc_path=${proc_root}/${proc_file}
+	if [ -r "${proc_path}" ]; then
+		echo "--- ${proc_path}"
+		if head -n 20 "${proc_path}"; then
+			pass "read ${proc_path}"
+		else
+			fail "cannot read ${proc_path}"
+		fi
+	else
+		fail "missing ${proc_path}"
+	fi
 done
 
+if [ -d "${sys_root}/class/net/${INTERFACE}" ]; then
+	pass "sysfs network class for ${INTERFACE}"
+else
+	fail "sysfs network class for ${INTERFACE}"
+fi
+
+if [ -d "${sys_root}/class/input" ]; then
+	pass "sysfs input class is present"
+else
+	fail "sysfs input class is missing"
+fi
+
+echo "=== input devices ==="
+if [ -d "${dev_root}/input" ]; then
+	ls -la "${dev_root}/input"
+	if ls "${dev_root}/input" | grep -q .; then
+		pass "/dev/input contains device nodes"
+	else
+		fail "/dev/input is empty"
+	fi
+else
+	fail "/dev/input is missing"
+fi
+
+if [ -r "${proc_root}/bus/input/devices" ]; then
+	if grep -E '^(I:|N:|H:)' "${proc_root}/bus/input/devices"; then
+		pass "read /proc/bus/input/devices"
+	else
+		fail "/proc/bus/input/devices contains no input device records"
+	fi
+else
+	fail "missing /proc/bus/input/devices"
+fi
+
+echo "=== framebuffer and display devices ==="
+if [ -e "${dev_root}/fb0" ]; then
+	ls -la "${dev_root}/fb0"
+	if [ -w "${dev_root}/fb0" ]; then
+		pass "framebuffer /dev/fb0 is writable"
+		if dd if=/dev/zero of="${dev_root}/fb0" bs=4096 count=1 2>/dev/null; then
+			pass "framebuffer write /dev/fb0"
+		else
+			fail "framebuffer write /dev/fb0"
+		fi
+	else
+		fail "framebuffer /dev/fb0 is not writable"
+	fi
+else
+	fail "framebuffer /dev/fb0 is missing"
+fi
+
+if [ -e "${dev_root}/nt35510" ]; then
+	ls -la "${dev_root}/nt35510"
+	if [ -w "${dev_root}/nt35510" ]; then
+		pass "display /dev/nt35510 is writable"
+	else
+		fail "display /dev/nt35510 is not writable"
+	fi
+else
+	fail "display /dev/nt35510 is missing"
+fi
+
+echo "=== network ==="
+network_available=0
+if ip link show "${INTERFACE}" >/dev/null 2>&1; then
+	network_available=1
+	ip addr show "${INTERFACE}"
+	pass "network interface ${INTERFACE}"
+else
+	fail "network interface ${INTERFACE} is unavailable"
+fi
+
+if [ "${network_available}" -eq 1 ]; then
+	carrier_path=${sys_root}/class/net/${INTERFACE}/carrier
+	if [ -r "${carrier_path}" ] && [ "$(cat "${carrier_path}")" = 1 ]; then
+		pass "${INTERFACE} carrier"
+	else
+		fail "${INTERFACE} carrier is not 1"
+	fi
+
+	for statistic in rx_packets tx_packets rx_bytes tx_bytes rx_errors tx_errors; do
+		path=${sys_root}/class/net/${INTERFACE}/statistics/${statistic}
+		if [ -r "${path}" ]; then
+			echo "${INTERFACE} ${statistic}: $(cat "${path}")"
+		else
+			fail "missing ${INTERFACE} statistic: ${statistic}"
+		fi
+	done
+
+	rx_errors=$(read_statistic rx_errors 2>/dev/null || echo unavailable)
+	tx_errors=$(read_statistic tx_errors 2>/dev/null || echo unavailable)
+	if [ "${rx_errors}" = 0 ] && [ "${tx_errors}" = 0 ]; then
+		pass "${INTERFACE} error counters are zero"
+	else
+		fail "${INTERFACE} errors: rx=${rx_errors}, tx=${tx_errors}"
+	fi
+
+	if command -v ifconfig >/dev/null 2>&1; then
+		ifconfig "${INTERFACE}"
+		pass "ifconfig ${INTERFACE}"
+	else
+		fail "ifconfig is unavailable"
+	fi
+fi
+
 echo "=== interrupts before ping ==="
-cat /proc/interrupts
+cat "${proc_root}/interrupts"
+irq_before=$(interrupt_count 2>/dev/null || echo unavailable)
 
 echo "=== ping ${SERVER_IP} ==="
-ping -c 3 -W 2 "${SERVER_IP}" || true
+if [ "${network_available}" -eq 1 ] && ping -c "${PING_COUNT}" -W "${PING_DEADLINE}" "${SERVER_IP}"; then
+	pass "ping ${SERVER_IP}"
+else
+	fail "ping ${SERVER_IP}"
+fi
 
 echo "=== interrupts after ping ==="
-cat /proc/interrupts
+cat "${proc_root}/interrupts"
+irq_after=$(interrupt_count 2>/dev/null || echo unavailable)
+case "${irq_before}:${irq_after}" in
+	*[!0-9:]*|:*)
+		fail "cannot read ${INTERFACE} interrupt counter"
+		;;
+	*)
+		if [ "${irq_after}" -gt "${irq_before}" ]; then
+			pass "${INTERFACE} interrupt counter increased from ${irq_before} to ${irq_after}"
+		else
+			fail "${INTERFACE} interrupt counter did not increase: ${irq_before} to ${irq_after}"
+		fi
+		;;
+esac
+
+echo "=== board inputs and outputs ==="
+if nscscc-board read; then
+	pass "confreg input read"
+else
+	fail "confreg input read"
+fi
+
+if nscscc-board led "${DEMO_LED}"; then
+	pass "LED write ${DEMO_LED}"
+else
+	fail "LED write ${DEMO_LED}"
+fi
+
+if nscscc-board display "${DEMO_DISPLAY}"; then
+	pass "seven-segment write ${DEMO_DISPLAY}"
+else
+	fail "seven-segment write ${DEMO_DISPLAY}"
+fi
 
 echo "=== recent kernel messages ==="
 dmesg | tail -80
+
+if [ "${failures}" -eq 0 ]; then
+	echo "nscscc_check=pass"
+	exit 0
+fi
+
+echo "nscscc_check=fail failures=${failures}" >&2
+exit 1

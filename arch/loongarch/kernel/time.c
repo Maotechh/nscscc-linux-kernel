@@ -10,6 +10,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/sched_clock.h>
 #include <linux/spinlock.h>
 
@@ -209,12 +210,48 @@ int __init constant_clocksource_init(void)
 	return res;
 }
 
+/*
+ * The constant timer frequency is normally derived from CPUCFG (64-bit) or
+ * from a per-SoC compile-time default (32-bit).  The competition SoC has no
+ * reliable SMBIOS and its CPU/constant counter may run at a frequency that
+ * differs from the compile-time default, so allow the built-in device tree to
+ * override it with the standard ePAPR "clock-frequency" property of the boot
+ * CPU.  A wrong value here makes the whole kernel time base - and therefore
+ * udelay(), timeouts and sleep - wrong by the same ratio.
+ */
+static void __init const_clock_freq_from_dt(void)
+{
+	struct device_node *cpu;
+	u32 freq = 0;
+
+	if (!of_have_populated_dt())
+		return;
+
+	cpu = of_find_node_by_path("/cpus/cpu@0");
+	if (!cpu)
+		cpu = of_get_next_cpu_node(NULL);
+	if (!cpu)
+		return;
+
+	if (!of_property_read_u32(cpu, "clock-frequency", &freq) && freq)
+		const_clock_freq = freq;
+
+	of_node_put(cpu);
+}
+
 void __init time_init(void)
 {
 	if (!cpu_has_cpucfg)
 		const_clock_freq = cpu_clock_freq;
 	else
 		const_clock_freq = calc_const_freq();
+
+	const_clock_freq_from_dt();
+
+	if (!const_clock_freq) {
+		pr_warn("Constant clock frequency not available, using 100 MHz\n");
+		const_clock_freq = 100000000;
+	}
 
 	constant_clockevent_init();
 	constant_clocksource_init();

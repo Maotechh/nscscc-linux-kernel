@@ -12,9 +12,18 @@ the lab host, and calls BusyBox `switch_root`.
 The normal initramfs boot remains the default. If the NFS argument is absent,
 network setup fails, the export cannot be mounted, or the export has no
 executable `/sbin/init`, boot continues in the recovery initramfs.
-The initramfs and Buildroot `S41nscscc-network` services detect the existing
-`10.90.50.44/24` address before changing `eth0`, so `switch_root` does not
-flush the address used by the mounted NFS filesystem.
+The initramfs and Buildroot network services detect any existing global IPv4
+address before changing `eth0`. This preserves static configuration as well as
+kernel DHCP or BOOTP configuration, so `switch_root` does not flush the address
+used by the mounted NFS filesystem. An explicit network-service `restart`
+still replaces the address with the value in `network.conf`.
+
+The NFS mount attempt in `/init` is capped with BusyBox `timeout` (15 s by
+default). If the export cannot be mounted in that time, the recovery initramfs
+continues to the normal shell instead of hanging the boot. `/init` also falls
+back to a static `/dev` with `console`, `null`, `zero`, and `ttyS0` when
+`devtmpfs` is unavailable, and it only redirects its standard fds to
+`/dev/console` after confirming that node exists.
 
 ## Kernel and initramfs support
 
@@ -33,6 +42,13 @@ nscscc.nfsopts=vers=3,tcp
 
 The options value is passed to `mount -t nfs`. Do not include spaces. The
 default is `vers=3,tcp`.
+
+For a non-interactive demonstration during boot, add
+`nscscc.autorun=nscscc-demo` (or `nscscc.autorun=nscscc-check`) to the kernel
+command line. After the startup scripts and network service complete, the
+initramfs runs that command once, drains any UART bytes that arrived during
+boot so they are not executed by the first shell, and then prints the issue
+banner and starts the console shell.
 
 ## Server preparation
 
@@ -70,6 +86,17 @@ inside the compressed cpio, checks that BusyBox has NFS mount support, and
 checks that the embedded BusyBox and configuration hashes are recorded in
 `/etc/nscscc/build-info`. It also checks that `/init` contains the documented
 arguments. It is intentionally an offline check.
+
+The host-side service tests exercise the address-preservation and error paths,
+as well as the success and failure results reported by `nscscc-check`:
+
+```sh
+scripts/nscscc/test-userspace-services.sh
+```
+
+These tests execute the actual shell scripts with temporary filesystem and
+command mocks. They do not emulate LoongArch instructions, DMFE, or an NFS
+server.
 
 ## Hardware validation still required
 

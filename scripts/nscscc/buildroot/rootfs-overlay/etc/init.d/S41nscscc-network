@@ -1,47 +1,76 @@
 #!/bin/sh
 
-interface=eth0
-ip_cidr=10.90.50.44/24
-network_ready=/run/nscscc-network-ready
+PATH=${NSCSCC_PATH:-/sbin:/bin:/usr/sbin:/usr/bin}
+root=${NSCSCC_ROOT:-}
+config=${root}/etc/nscscc/network.conf
+network_ready=${root}/run/nscscc-network-ready
+
+AUTO_NET=1
+INTERFACE=eth0
+IP_CIDR=10.90.50.44/24
+SERVER_IP=10.90.50.43
+[ -r "${config}" ] && . "${config}"
 
 start_network()
 {
-	ip link set "${interface}" up
-	if ip addr show dev "${interface}" | grep -Fq "inet ${ip_cidr} "; then
-		mkdir -p /run
-		: >"${network_ready}"
+	ip link set lo up || return 1
+	if [ "${AUTO_NET}" != 1 ]; then
+		echo "NSCSCC automatic network configuration is disabled."
+		return 0
+	fi
+	if [ -e "${network_ready}" ]; then
 		echo "NSCSCC network is already configured."
 		return 0
 	fi
 
-	ip addr flush dev "${interface}"
-	ip addr add "${ip_cidr}" dev "${interface}"
-	mkdir -p /run
+	if ! ip link show "${INTERFACE}" >/dev/null 2>&1; then
+		echo "Network interface not found: ${INTERFACE}" >&2
+		return 1
+	fi
+
+	ip link set "${INTERFACE}" up || return 1
+	if ip addr show dev "${INTERFACE}" |
+		grep -Eq 'inet [^[:space:]]+ scope global'; then
+		mkdir -p "${root}/run"
+		: >"${network_ready}"
+		echo "Preserving existing IPv4 configuration on ${INTERFACE}."
+		return 0
+	fi
+
+	ip addr flush dev "${INTERFACE}" || return 1
+	ip addr add "${IP_CIDR}" dev "${INTERFACE}" || return 1
+	mkdir -p "${root}/run"
 	: >"${network_ready}"
 }
 
 stop_network()
 {
-	if ip link show "${interface}" >/dev/null 2>&1; then
-		ip addr flush dev "${interface}"
-		ip link set "${interface}" down
+	if ip link show "${INTERFACE}" >/dev/null 2>&1; then
+		ip addr flush dev "${INTERFACE}"
+		ip link set "${INTERFACE}" down
 	fi
 	rm -f "${network_ready}"
 }
 
-case "$1" in
-    start)
-        start_network
-        ;;
-    stop)
-        stop_network
-        ;;
-    restart)
-        stop_network
-        start_network
-        ;;
-    *)
-        echo "Usage: $0 {start|stop|restart}" >&2
-        exit 1
-        ;;
+case "${1:-start}" in
+	start)
+		start_network
+		;;
+	stop)
+		stop_network
+		;;
+	restart)
+		stop_network
+		start_network
+		;;
+	status)
+		ip addr show "${INTERFACE}"
+		;;
+	ping)
+		ping -c 3 -W 2 "${SERVER_IP}"
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status|ping}" >&2
+		exit 2
+		;;
 esac

@@ -327,7 +327,8 @@ void __init platform_init(void)
 	/* init base address of io space */
 	set_io_port_base((unsigned long)
 		ioremap(LOONGSON_LIO_BASE, LOONGSON_LIO_SIZE));
-	efi_init();
+	/* The competition SoC has no EFI firmware. efi.c is only built with
+	 * CONFIG_EFI, so do not reference its init functions here. */
 #ifdef CONFIG_ACPI_TABLE_UPGRADE
 	acpi_table_upgrade();
 #endif
@@ -348,8 +349,6 @@ void __init platform_init(void)
 	dmi_setup();
 	smbios_parse();
 	pr_info("The BIOS Version: %s\n", b_info.bios_version);
-
-	efi_runtime_init();
 
 }
 

@@ -31,9 +31,12 @@ the current SoC without adding the corresponding controllers.
 The public history includes LA32 DMA support, DMFE fixes, LS1A NAND support,
 cache maintenance, SoC UART and GMAC interrupt corrections, kernel modules,
 loop devices, Btrfs, file locking, inotify and IKCONFIG. The current
-`la32_defconfig` already contains the applicable features, including DMFE,
-MII, LS1A NAND, modules, loop, Btrfs, file locking, inotify and IKCONFIG.
-These changes should not be copied again.
+The historical `la32_defconfig` already contained the applicable features,
+including DMFE, MII, LS1A NAND, modules, loop, Btrfs, file locking, inotify
+and IKCONFIG.  The 2026 competition config intentionally drops the features
+that have no hardware on the selected FPGA system (Btrfs, LS1A NAND and other
+dead subsystems); see the kernel image-size section below.  These changes
+should not be copied again.
 
 ### LainChip
 
@@ -60,18 +63,22 @@ adoption decisions.
 
 ## Current hardware and software
 
-The Chiplab `loongson` SoC contains DDR3, UART, DMFE Ethernet, SPI flash,
-NAND signals and `confreg`. `confreg` connects the switches, buttons, LEDs and
-seven-segment display. The current device tree enables UART and DMFE. Its NAND
-node is disabled.
+The current Chiplab system integration contains DDR3, UART, DMFE Ethernet, SPI
+flash, `confreg`, PS/2, an NT35510 data path, a framebuffer and one
+UltraEmbedded Full-Speed USB host. `confreg` connects the switches, buttons,
+LEDs and seven-segment display. The device tree contains nodes for these
+implemented controllers. The NAND node remains disabled because Linux NAND
+operation has not been validated on the selected FPGA system.
 
 Kernel commit `db7abacb8820fd0ca5212e2930d74118be7d8a8e` has already reached a
 BusyBox shell on the FPGA. The observed kernel reports 128 MiB DDR, `ttyS0`
 and `eth0`. TFTP transfer and host-side CRC32 verification have also passed.
 Linux network transmit and receive, DMFE interrupts, switches, buttons, LEDs,
-the seven-segment display, and the migrated confreg platform driver have now
-been verified on the FPGA. See
-`hardware-validation-20260719.md` and its raw evidence files.
+the seven-segment display, and the migrated confreg platform driver have been
+verified on the FPGA. Later recorded runs also verified the NT35510-sized write,
+framebuffer ABI, X.Org, Fluxbox, XTerm and an idle PS/2 controller. These tests
+do not prove physical LCD output or attached input events. See the
+`hardware-validation-*.md` reports and their raw evidence files.
 
 ## DFPMTS migration result
 
@@ -85,24 +92,39 @@ Migrated and verified on the current bitstream:
   device information, and driver version.
 * `nscscc-board` sysfs access with a `devmem` compatibility fallback.
 
-Rejected for this FPGA design:
+Later system-integration work added the hardware required for the following
+parts, so they are no longer configuration-only proposals:
 
-* NT35510 LCD, Xilinx framebuffer and DMA, and Altera PS/2.  The active RTL
-  and device tree do not contain those controllers or their pin assignments.
+* The adapted NT35510 character driver and Xilinx framebuffer driver from the
+  DFPMTS archive.
+* A PS/2 APB controller compatible with the standard Altera PS/2 Linux driver.
+* A Full-Speed UE11 USB host, Linux HCD, HID, hidraw and evdev userspace path.
+* A portable Buildroot configuration with X.Org, fbdev, evdev, eudev, Fluxbox,
+  XTerm, `usbutils` and `evtest` for the 128 MiB system.
+
+Rejected from the DFPMTS material:
+
 * The DFPMTS L2 cache operations, fixed cache geometry, and 50 MHz timer
   change.  They alter CPU implementation contracts and conflict with the
   current 100 MHz setup.
 * The DFPMTS DMFE rewrite.  The current DMFE already passes independent
   transmit, receive, interrupt, and error-counter checks.
 
-Still not implemented:
+Still incomplete or awaiting hardware evidence:
 
-* A portable Buildroot tree.  The supplied configuration uses absolute paths,
-  a private libffi source directory, LSX/LASX selections, and a 1 GiB ext4
-  image that does not match this 128 MiB initramfs target.
-* NFS root, a larger network service, and reproducible CoreMark or Dhrystone
-  measurements.  These need a separately pinned Buildroot or user-space
-  source tree.
+* NFSv3 root is implemented and passes build and shell-path validation, but it
+  still needs an FPGA run proving DMFE mount, `switch_root` and read-write file
+  access.
+* The physical LCD has no successful visual observation for the current
+  framebuffer system, even though complete 768000-byte writes and the
+  framebuffer userspace ABI have been verified.
+* PS/2 key events and USB HID mouse events still require attached-device logs.
+  The UE11 controller supports Full-Speed devices only.
+* Reproducible CoreMark, Dhrystone and network measurements have not been
+  defined as Linux functionality claims. CPU performance remains outside this
+  Linux-only work.
+* The competition committee has not published the exact operations required
+  for the 20-point Linux item.
 
 ## Implementation order
 
@@ -116,24 +138,55 @@ Still not implemented:
 6. A compact demonstration command that records kernel, memory, filesystem,
    network and interrupt information.
 
-The scripts under `scripts/nscscc` implement items 1 through 6. The final
+The scripts under `scripts/nscscc` implement items 1 through 6. A recorded
 artifact completed two independent boots from FPGA programming through the
 Linux checks. The BusyBox and initramfs inputs also completed byte-for-byte
-rebuild checks.
+rebuild checks. The current post-NFS revision has passed offline builds and
+shell tests but has not replaced that earlier hardware evidence.
 
 ## Later features
 
 The most useful additions that do not require new FPGA controllers are:
 
-* An NFS root filesystem after DMFE reliability is established. This allows a
-  larger userspace without increasing the embedded initramfs.
+* Hardware validation of the existing NFS root, including recovery behavior
+  when the server is unavailable.
 * BusyBox `httpd` or a small TCP service as a visible bidirectional network
   demonstration.
 * Reproducible CoreMark and memory/network measurements with raw logs and fixed
   build identifiers.
-* A small board-control application that reads switches and updates LEDs and
-  seven-segment digits through the `confreg` driver.
+* Additional non-destructive self-tests for input devices, framebuffer state
+  and optional controllers when the corresponding hardware is present.
 
-SD storage, USB, framebuffer and audio should be considered only together
-with a defined hardware implementation and pin assignment. Adding kernel
-configuration without that hardware provides no usable competition feature.
+SD storage and audio should be considered only together with a defined
+hardware implementation and pin assignment. Adding kernel configuration
+without that hardware provides no usable competition feature.
+
+## Kernel image-size and boot-time optimization
+
+The 2026 `la32_defconfig` was trimmed to reduce the stripped `vmlinux` TFTP
+size and boot time without changing any board device contract.  The concrete
+changes are:
+
+* `CONFIG_CC_OPTIMIZE_FOR_SIZE=y` instead of performance and `CONFIG_HZ=100`
+  instead of 250, for the 100 MHz CPU and 8 KiB L1 caches.
+* `CONFIG_CONSOLE_LOGLEVEL_DEFAULT=4` (the `quiet` level) and
+  `CONFIG_LOG_BUF_SHIFT=16` (64 KiB).
+* Disabled dead subsystems for the current FPGA: Netfilter, IP_SCTP, IPv6,
+  STMMAC/PCS Ethernet, MTD CFI/NAND, SCSI/ATA, PCMCIA, IPMI, PPS, RC/IR,
+  EFI, XFS, Btrfs, NTFS, FSCACHE, BLK_SED_OPAL, BLK_DEV_INTEGRITY,
+  BLK_DEV_ZONED, KSM, BFQ/Kyber and the exotic partition parsers.
+* Required features remain enabled: DMFE, NFSv3 client, DHCP/BOOTP, gzip
+  initramfs, serial console, PS/2 serio, UE11 USB HCD + HID + hidraw,
+  NT35510/framebuffer drivers, modules, proc/sysfs and devtmpfs.
+
+The build pipeline already TFTPs the stripped ELF, so source-level reduction
+is the only kernel-image-level transfer win in this tree.
+
+A full EPYC2 build of commit `e47c3a585` with the trimmed config produced a
+stripped `vmlinux` of `24,998,164` bytes (`sha256
+ab7938765c6ab8646d9f63a92acfed1e92968c7d0b6efc437604e9cde8fd9aa2`,
+manifest `Documentation/nscscc/evidence/vmlinux-opt-v3-20260816.manifest`),
+down from `30,915,132` bytes (~19 % smaller).  The rebuild was reproducible
+(two byte-for-byte identical initramfs archives) and still linked the UE11
+USB host driver; the only warnings are pre-existing DMFE and Kconfig
+dependency warnings.

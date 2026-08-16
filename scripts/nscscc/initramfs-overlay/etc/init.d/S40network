@@ -1,8 +1,9 @@
 #!/bin/sh
 
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-config=/etc/nscscc/network.conf
-network_ready=/run/nscscc-network-ready
+PATH=${NSCSCC_PATH:-/sbin:/bin:/usr/sbin:/usr/bin}
+root=${NSCSCC_ROOT:-}
+config=${root}/etc/nscscc/network.conf
+network_ready=${root}/run/nscscc-network-ready
 
 AUTO_NET=0
 INTERFACE=eth0
@@ -11,7 +12,7 @@ SERVER_IP=10.90.50.43
 [ -r "${config}" ] && . "${config}"
 
 start_network() {
-	ip link set lo up
+	ip link set lo up || return 1
 	if [ "${AUTO_NET}" != 1 ]; then
 		echo "NSCSCC automatic network configuration is disabled."
 		return 0
@@ -27,9 +28,18 @@ start_network() {
 		return 1
 	fi
 
-	ip link set "${INTERFACE}" up
-	ip addr flush dev "${INTERFACE}"
-	ip addr add "${IP_CIDR}" dev "${INTERFACE}"
+	ip link set "${INTERFACE}" up || return 1
+	if ip addr show dev "${INTERFACE}" |
+		grep -Eq 'inet [^[:space:]]+ scope global'; then
+		mkdir -p "${root}/run"
+		: >"${network_ready}"
+		echo "Preserving existing IPv4 configuration on ${INTERFACE}."
+		return 0
+	fi
+
+	ip addr flush dev "${INTERFACE}" || return 1
+	ip addr add "${IP_CIDR}" dev "${INTERFACE}" || return 1
+	mkdir -p "${root}/run"
 	: >"${network_ready}"
 	echo "Configured ${INTERFACE} as ${IP_CIDR}; server ${SERVER_IP}."
 }

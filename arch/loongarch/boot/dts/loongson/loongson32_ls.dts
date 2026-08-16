@@ -17,6 +17,25 @@
 		bootargs = "earlycon atkbd.reset=0";
 	};
 
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			device_type = "cpu";
+			compatible = "loongson,loongson32";
+			reg = <0>;
+			/*
+			 * CPU/constant-timer frequency of the competition SoC.
+			 * The kernel derives its clockevent, clocksource,
+			 * udelay() and timeouts from this value; it must match
+			 * the actual core clock (sys_clk=100 MHz), not the
+			 * 200 MHz compile-time LS_SOC default.
+			 */
+			clock-frequency = <100000000>;
+		};
+	};
+
 	extioiic: interrupt-controller@0x1fe11600 {
 		compatible = "loongson,extioi-interrupt-controller";
 		interrupt-controller;

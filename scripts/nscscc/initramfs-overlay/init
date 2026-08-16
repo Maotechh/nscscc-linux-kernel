@@ -3,14 +3,42 @@
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 export PATH
 
-mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+NFS_MOUNT_TIMEOUT=15
+
+mount_devtmpfs()
+{
+	if mount -t devtmpfs devtmpfs /dev 2>/dev/null; then
+		return 0
+	fi
+
+	# devtmpfs is missing from some minimal kernels. A tmpfs /dev with the
+	# fixed console/null/zero nodes is enough for init, rcS and the shell.
+	echo "devtmpfs unavailable; creating a static /dev" >&2
+	mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /dev 2>/dev/null || return 1
+	mknod -m 600 /dev/console c 5 1 2>/dev/null || true
+	mknod -m 666 /dev/null c 1 3 2>/dev/null || true
+	mknod -m 666 /dev/zero c 1 5 2>/dev/null || true
+	mknod -m 600 /dev/ttyS0 c 4 64 2>/dev/null || true
+	return 0
+}
+
+mount_devtmpfs || echo "Warning: /dev is not mounted; boot may be incomplete." >&2
 mkdir -p /dev/pts /dev/shm /proc /run /sys /tmp
 mount -t tmpfs -o mode=0755,nosuid,nodev tmpfs /run 2>/dev/null || true
 mount -t proc proc /proc 2>/dev/null || true
 mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devpts devpts /dev/pts 2>/dev/null || true
 
-exec </dev/console >/dev/console 2>&1
+# If devtmpfs and the static fallback both failed, still try to create the
+# console node on the root filesystem before redirecting the standard fds.
+if [ ! -e /dev/console ]; then
+	mknod -m 600 /dev/console c 5 1 2>/dev/null || true
+fi
+if [ -e /dev/console ]; then
+	exec </dev/console >/dev/console 2>&1
+else
+	echo "initramfs: /dev/console is unavailable" >&2
+fi
 
 nfsroot_spec=
 nfsroot_opts=vers=3,tcp
@@ -29,7 +57,7 @@ fi
 
 if [ -n "${nfsroot_spec}" ]; then
 	case "${nfsroot_spec}" in
-		*:*)
+		*:/*)
 			;;
 		*)
 			echo "Invalid nscscc.nfsroot value: ${nfsroot_spec}" >&2
@@ -43,7 +71,22 @@ if [ -n "${nfsroot_spec}" ]; then
 	echo "NSCSCC NFS root requested: ${nfsroot_spec}"
 	if /etc/init.d/S40network start; then
 		mkdir -p /newroot
-		if mount -t nfs -o "${nfsroot_opts}" "${nfsroot_spec}" /newroot; then
+		mounted=0
+		if command -v timeout >/dev/null 2>&1; then
+			if timeout "${NFS_MOUNT_TIMEOUT}" mount -t nfs -o "${nfsroot_opts}" "${nfsroot_spec}" /newroot; then
+				mounted=1
+			else
+				echo "Cannot mount NFS root after ${NFS_MOUNT_TIMEOUT}s; using initramfs." >&2
+			fi
+		else
+			if mount -t nfs -o "${nfsroot_opts}" "${nfsroot_spec}" /newroot; then
+				mounted=1
+			else
+				echo "Cannot mount NFS root; using initramfs." >&2
+			fi
+		fi
+
+		if [ "${mounted}" -eq 1 ]; then
 			if [ -x /newroot/sbin/init ]; then
 				echo "Switching to NFS root ${nfsroot_spec}."
 				switch_root /newroot /sbin/init
@@ -53,12 +96,17 @@ if [ -n "${nfsroot_spec}" ]; then
 			fi
 			umount /newroot 2>/dev/null || true
 		else
-			echo "Cannot mount NFS root; using initramfs." >&2
+			umount /newroot 2>/dev/null || true
 		fi
 	else
 		echo "Cannot configure network for NFS root; using initramfs." >&2
 	fi
 fi
 
-exec /sbin/init
+if [ -x /sbin/init ]; then
+	exec /sbin/init
+fi
+
+echo "initramfs: /sbin/init is not executable; starting a shell." >&2
+exec /bin/sh
 

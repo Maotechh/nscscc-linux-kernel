@@ -34,7 +34,7 @@ static int show_cpuinfo(struct seq_file *m, void *v)
 	unsigned int isa = cpu_data[n].isa_level;
 	unsigned int version = cpu_data[n].processor_id & 0xff;
 	unsigned int bogomips_unit = 500000 / HZ;
-	u64 freq = cpu_clock_freq;
+	u64 freq = cpu_clock_freq ? : const_clock_freq;
 	struct proc_cpuinfo_notifier_args notifier_args;
 
 #ifdef CONFIG_SMP

@@ -36,13 +36,26 @@ for command in awk cpio grep gzip mktemp sha256sum; do
 	fi
 done
 
-if ! grep -Fqx 'CONFIG_FEATURE_MOUNT_NFS=y' "${busybox_config}"; then
-	echo "BusyBox configuration is missing CONFIG_FEATURE_MOUNT_NFS=y" >&2
-	exit 1
-fi
+required_busybox_options=(
+	CONFIG_DD=y
+	CONFIG_FEATURE_MOUNT_NFS=y
+	CONFIG_IFCONFIG=y
+	CONFIG_MKNOD=y
+	CONFIG_PIDOF=y
+	CONFIG_PS=y
+	CONFIG_TIMEOUT=y
+)
+for option in "${required_busybox_options[@]}"; do
+	if ! grep -Fqx "${option}" "${busybox_config}"; then
+		echo "BusyBox configuration is missing ${option}" >&2
+		exit 1
+	fi
+done
 
 required_options=(
 	CONFIG_IP_PNP=y
+	CONFIG_IP_PNP_DHCP=y
+	CONFIG_IP_PNP_BOOTP=y
 	CONFIG_NFS_FS=y
 	CONFIG_NFS_V3=y
 	CONFIG_ROOT_NFS=y
@@ -60,13 +73,20 @@ entries=${work_dir}/entries.txt
 gzip -dc "${initramfs}" | cpio -it >"${entries}" 2>"${work_dir}/cpio.log"
 
 required_entries=(
+	bin/awk
 	bin/busybox
+	bin/dd
+	bin/mknod
 	bin/mount
 	bin/switch_root
+	bin/timeout
 	etc/nscscc/build-info
 	etc/init.d/S40network
 	etc/init.d/S41nscscc-network
 	init
+	usr/bin/nscscc-board
+	usr/bin/nscscc-check
+	usr/bin/nscscc-demo
 )
 for entry in "${required_entries[@]}"; do
 	if ! grep -Fqx "${entry}" "${entries}"; then
@@ -76,7 +96,7 @@ for entry in "${required_entries[@]}"; do
 done
 
 gzip -dc "${initramfs}" | cpio -i --quiet --to-stdout init >"${work_dir}/init"
-for token in nscscc.nfsroot= nscscc.nfsopts= switch_root; do
+for token in nscscc.nfsroot= nscscc.nfsopts= switch_root NFS_MOUNT_TIMEOUT; do
 	if ! grep -Fq "${token}" "${work_dir}/init"; then
 		echo "Initramfs /init is missing ${token}" >&2
 		exit 1

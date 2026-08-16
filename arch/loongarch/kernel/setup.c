@@ -274,13 +274,21 @@ static void __init bootcmdline_append(const char *s, size_t max)
 
 static void __init bootcmdline_init(char **cmdline_p)
 {
-	boot_command_line[0] = 0;
-
 	/*
-	 * Take arguments from the bootloader at first. Early code should have
-	 * filled arcs_cmdline with arguments from the bootloader.
+	 * boot_command_line now already contains the arguments recorded in the
+	 * device tree `chosen` node (platform_init() ->
+	 * early_init_dt_scan_chosen()).  Put any bootloader/firmware arguments
+	 * captured in arcs_cmdline in front so that they keep precedence, the
+	 * same way the original code did.
 	 */
-	bootcmdline_append(arcs_cmdline, COMMAND_LINE_SIZE);
+	if (arcs_cmdline[0]) {
+		char dt_command_line[COMMAND_LINE_SIZE];
+
+		strlcpy(dt_command_line, boot_command_line, COMMAND_LINE_SIZE);
+		boot_command_line[0] = 0;
+		bootcmdline_append(arcs_cmdline, COMMAND_LINE_SIZE);
+		bootcmdline_append(dt_command_line, COMMAND_LINE_SIZE);
+	}
 
 	strlcpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
 	*cmdline_p = command_line;
@@ -405,10 +413,10 @@ void __init setup_arch(char **cmdline_p)
 #ifdef CONFIG_EARLY_PRINTK
 	setup_early_printk();
 #endif
-	bootcmdline_init(cmdline_p);
 
 	init_initrd();
 	platform_init();
+	bootcmdline_init(cmdline_p);
 	finalize_initrd();
 	cpu_report();
 

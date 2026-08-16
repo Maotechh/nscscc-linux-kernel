@@ -46,6 +46,11 @@
   `ls -la /`。
 - initramfs 中 `chmod`、`hostname`、`mkdir`、`reboot`、`sync` 和 `umount`
   等启动及重复测试所需 BusyBox applet 可用。
+- `nscscc-check` / `nscscc-demo` 统一自检命令，覆盖文件、进程、挂载、
+  `/proc` 与 `/sys` 读取、网络、confreg、输入设备节点和 framebuffer 写入，
+  每项输出 PASS/FAIL 并以非零状态返回。
+- 启动脚本支持 `nscscc.autorun=nscscc-demo`，并在进入 shell 前丢弃启动期间
+  缓冲的 UART 输入，避免误执行；NFS 挂载有 15 秒 `timeout` 上限。
 - `eth0` carrier 为 1，RX／TX error 为 0，三次 ping 均成功，DMFE interrupt
   count 增加。
 - confreg read、LED write 和七段数码管 write 成功。
