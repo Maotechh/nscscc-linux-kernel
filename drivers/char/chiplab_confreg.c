@@ -15,13 +15,18 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/poll.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/sysfs.h>
+#include <linux/timer.h>
 #include <linux/uaccess.h>
+#include <linux/wait.h>
 
 #define DRIVER_NAME			"chiplab_confreg"
+#define BTN_EVENT_NAME			"chiplab_btn_events"
 #define CHIPLAB_CONFREG_REG_SIZE	0x1034
+#define BTN_EVENT_RING			64
 
 #define TIMER_ADDR	0x0000
 #define LED_ADDR	0x1000
@@ -50,6 +55,20 @@ struct confreg_device {
 	struct device *device;
 	dev_t devt;
 	spinlock_t lock;
+
+	/* Matrix-keyboard edge queue exposed as /dev/chiplab_btn_events. */
+	struct cdev btn_cdev;
+	struct device *btn_device;
+	wait_queue_head_t btn_wq;
+	spinlock_t btn_lock;
+	struct timer_list btn_timer;
+	unsigned char btn_keys[BTN_EVENT_RING];
+	unsigned char btn_states[BTN_EVENT_RING];
+	unsigned int btn_head;
+	unsigned int btn_count;
+	unsigned int btn_openers;
+	unsigned int btn_timer_running;
+	unsigned short btn_last;
 };
 
 struct confreg_attribute {
@@ -413,11 +432,153 @@ static const struct file_operations confreg_fops = {
 	.llseek = default_llseek,
 };
 
+static void confreg_btn_timer(struct timer_list *t)
+{
+	struct confreg_device *confreg = from_timer(confreg, t, btn_timer);
+	unsigned short now = confreg_readl(confreg, BTN_KEY_ADDR) & 0xffff;
+	unsigned short changed = now ^ confreg->btn_last;
+	unsigned long flags;
+	int i;
+
+	if (changed) {
+		spin_lock_irqsave(&confreg->btn_lock, flags);
+		for (i = 0; i < 16; i++) {
+			unsigned short mask = (unsigned short)(1u << i);
+			unsigned int pos;
+
+			if (!(changed & mask))
+				continue;
+			if (confreg->btn_count >= BTN_EVENT_RING) {
+				/* Never stall the timer: drop the oldest event. */
+				confreg->btn_head = (confreg->btn_head + 1) %
+						    BTN_EVENT_RING;
+				confreg->btn_count--;
+			}
+			pos = (confreg->btn_head + confreg->btn_count) %
+			      BTN_EVENT_RING;
+			confreg->btn_keys[pos] = (unsigned char)i;
+			confreg->btn_states[pos] = (now & mask) ? 1 : 0;
+			confreg->btn_count++;
+		}
+		confreg->btn_last = now;
+		spin_unlock_irqrestore(&confreg->btn_lock, flags);
+		wake_up_interruptible(&confreg->btn_wq);
+	} else {
+		confreg->btn_last = now;
+	}
+
+	mod_timer(&confreg->btn_timer, jiffies + msecs_to_jiffies(8));
+}
+
+static int confreg_btn_open(struct inode *inode, struct file *file)
+{
+	struct confreg_device *confreg =
+		container_of(inode->i_cdev, struct confreg_device, btn_cdev);
+	unsigned long flags;
+
+	file->private_data = confreg;
+	spin_lock_irqsave(&confreg->btn_lock, flags);
+	if (!confreg->btn_openers) {
+		confreg->btn_head = 0;
+		confreg->btn_count = 0;
+		confreg->btn_last =
+			confreg_readl(confreg, BTN_KEY_ADDR) & 0xffff;
+		if (!confreg->btn_timer_running) {
+			confreg->btn_timer_running = 1;
+			mod_timer(&confreg->btn_timer,
+				  jiffies + msecs_to_jiffies(8));
+		}
+	}
+	confreg->btn_openers++;
+	spin_unlock_irqrestore(&confreg->btn_lock, flags);
+	return 0;
+}
+
+static int confreg_btn_release(struct inode *inode, struct file *file)
+{
+	struct confreg_device *confreg = file->private_data;
+	unsigned long flags;
+	int last = 0;
+
+	spin_lock_irqsave(&confreg->btn_lock, flags);
+	if (confreg->btn_openers > 0)
+		confreg->btn_openers--;
+	last = (confreg->btn_openers == 0);
+	spin_unlock_irqrestore(&confreg->btn_lock, flags);
+
+	if (last) {
+		del_timer_sync(&confreg->btn_timer);
+		spin_lock_irqsave(&confreg->btn_lock, flags);
+		confreg->btn_timer_running = 0;
+		confreg->btn_head = 0;
+		confreg->btn_count = 0;
+		spin_unlock_irqrestore(&confreg->btn_lock, flags);
+	}
+	return 0;
+}
+
+static ssize_t confreg_btn_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct confreg_device *confreg = file->private_data;
+	unsigned char tmp[BTN_EVENT_RING * 2];
+	unsigned long flags;
+	size_t out = 0;
+	int ret;
+
+	if (count < 2)
+		return -EINVAL;
+
+	spin_lock_irqsave(&confreg->btn_lock, flags);
+	while (confreg->btn_count == 0) {
+		spin_unlock_irqrestore(&confreg->btn_lock, flags);
+		if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+		ret = wait_event_interruptible(confreg->btn_wq,
+					       confreg->btn_count > 0);
+		if (ret)
+			return ret;
+		spin_lock_irqsave(&confreg->btn_lock, flags);
+	}
+
+	while (out + 2 <= count && confreg->btn_count) {
+		tmp[out++] = confreg->btn_keys[confreg->btn_head];
+		tmp[out++] = confreg->btn_states[confreg->btn_head];
+		confreg->btn_head = (confreg->btn_head + 1) % BTN_EVENT_RING;
+		confreg->btn_count--;
+	}
+	spin_unlock_irqrestore(&confreg->btn_lock, flags);
+
+	if (copy_to_user(buf, tmp, out))
+		return -EFAULT;
+	*ppos += out;
+	return out;
+}
+
+static __poll_t confreg_btn_poll(struct file *file, poll_table *wait)
+{
+	struct confreg_device *confreg = file->private_data;
+	__poll_t mask = 0;
+
+	poll_wait(file, &confreg->btn_wq, wait);
+	if (READ_ONCE(confreg->btn_count) > 0)
+		mask |= EPOLLIN | EPOLLRDNORM;
+	return mask;
+}
+
+static const struct file_operations confreg_btn_fops = {
+	.owner = THIS_MODULE,
+	.open = confreg_btn_open,
+	.release = confreg_btn_release,
+	.read = confreg_btn_read,
+	.poll = confreg_btn_poll,
+};
+
 static int confreg_setup_chardev(struct confreg_device *confreg)
 {
 	int ret;
 
-	ret = alloc_chrdev_region(&confreg->devt, 0, 1, DRIVER_NAME);
+	ret = alloc_chrdev_region(&confreg->devt, 0, 2, DRIVER_NAME);
 	if (ret)
 		return ret;
 
@@ -427,10 +588,16 @@ static int confreg_setup_chardev(struct confreg_device *confreg)
 	if (ret)
 		goto err_unregister;
 
+	cdev_init(&confreg->btn_cdev, &confreg_btn_fops);
+	confreg->btn_cdev.owner = THIS_MODULE;
+	ret = cdev_add(&confreg->btn_cdev, confreg->devt + 1, 1);
+	if (ret)
+		goto err_cdev;
+
 	confreg->class = class_create(THIS_MODULE, DRIVER_NAME);
 	if (IS_ERR(confreg->class)) {
 		ret = PTR_ERR(confreg->class);
-		goto err_cdev;
+		goto err_btn_cdev;
 	}
 	confreg->class->dev_groups = confreg_groups;
 
@@ -441,23 +608,39 @@ static int confreg_setup_chardev(struct confreg_device *confreg)
 		goto err_class;
 	}
 
+	confreg->btn_device = device_create(confreg->class, &confreg->pdev->dev,
+					     confreg->devt + 1, confreg,
+					     BTN_EVENT_NAME);
+	if (IS_ERR(confreg->btn_device)) {
+		ret = PTR_ERR(confreg->btn_device);
+		confreg->btn_device = NULL;
+		device_destroy(confreg->class, confreg->devt);
+		goto err_class;
+	}
+
 	return 0;
 
 err_class:
 	class_destroy(confreg->class);
+err_btn_cdev:
+	cdev_del(&confreg->btn_cdev);
 err_cdev:
 	cdev_del(&confreg->cdev);
 err_unregister:
-	unregister_chrdev_region(confreg->devt, 1);
+	unregister_chrdev_region(confreg->devt, 2);
 	return ret;
 }
 
 static void confreg_cleanup_chardev(struct confreg_device *confreg)
 {
+	del_timer_sync(&confreg->btn_timer);
+	if (confreg->btn_device)
+		device_destroy(confreg->class, confreg->devt + 1);
 	device_destroy(confreg->class, confreg->devt);
 	class_destroy(confreg->class);
+	cdev_del(&confreg->btn_cdev);
 	cdev_del(&confreg->cdev);
-	unregister_chrdev_region(confreg->devt, 1);
+	unregister_chrdev_region(confreg->devt, 2);
 }
 
 static int confreg_probe(struct platform_device *pdev)
@@ -486,6 +669,9 @@ static int confreg_probe(struct platform_device *pdev)
 	confreg->phys_base = res->start;
 	confreg->pdev = pdev;
 	spin_lock_init(&confreg->lock);
+	spin_lock_init(&confreg->btn_lock);
+	init_waitqueue_head(&confreg->btn_wq);
+	timer_setup(&confreg->btn_timer, confreg_btn_timer, 0);
 	platform_set_drvdata(pdev, confreg);
 
 	ret = confreg_setup_chardev(confreg);
@@ -494,8 +680,8 @@ static int confreg_probe(struct platform_device *pdev)
 				     "failed to register character device\n");
 
 	dev_info(&pdev->dev,
-		 "registered /dev/%s and /sys/class/%s/%s\n",
-		 DRIVER_NAME, DRIVER_NAME, DRIVER_NAME);
+		 "registered /dev/%s, /dev/%s and /sys/class/%s/%s\n",
+		 DRIVER_NAME, BTN_EVENT_NAME, DRIVER_NAME, DRIVER_NAME);
 	return 0;
 }
 

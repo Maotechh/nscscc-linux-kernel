@@ -10,6 +10,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/slab.h>
@@ -22,6 +23,8 @@
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/vmalloc.h>
+#include <linux/math64.h>
+#include <linux/timekeeping.h>
 #include <asm/delay.h>
 
 #define DRV_NAME "nt35510"
@@ -52,6 +55,66 @@ static struct nt35510_drvdata {
 	struct fb_info *fb_info;
 	struct fb_deferred_io fbdefio;
 } * nt35510s[MAX_LCD_NUM];
+
+static unsigned int nt35510_defio_hz = NT35510_DEFAULT_DEFIO_HZ;
+
+static int nt35510_defio_hz_set(const char *val, const struct kernel_param *kp)
+{
+	unsigned int hz;
+	int ret;
+
+	ret = kstrtouint(val, 0, &hz);
+	if (ret)
+		return ret;
+	if (hz < 10 || hz > 250)
+		return -EINVAL;
+	*((unsigned int *)kp->arg) = hz;
+	if (nt35510s[0] && nt35510s[0]->fb_info && nt35510s[0]->fb_info->fbdefio)
+		nt35510s[0]->fb_info->fbdefio->delay =
+			max_t(unsigned long, 1, HZ / hz);
+	return 0;
+}
+
+static int nt35510_defio_hz_get(char *buffer, const struct kernel_param *kp)
+{
+	return sprintf(buffer, "%u\n", *((unsigned int *)kp->arg));
+}
+
+static const struct kernel_param_ops nt35510_defio_hz_ops = {
+	.set = nt35510_defio_hz_set,
+	.get = nt35510_defio_hz_get,
+};
+module_param_cb(defio_hz, &nt35510_defio_hz_ops, &nt35510_defio_hz, 0644);
+MODULE_PARM_DESC(defio_hz, "NT35510 deferred-I/O refresh rate (10..250, default 50)");
+
+static u64 nt35510_flush_count;
+static u64 nt35510_flush_ns_total;
+static u64 nt35510_flush_ns_max;
+
+static ssize_t flush_count_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%llu\n", nt35510_flush_count);
+}
+static DEVICE_ATTR_RO(flush_count);
+
+static ssize_t flush_avg_us_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	u64 avg = nt35510_flush_count ?
+		div64_u64(nt35510_flush_ns_total,
+			  nt35510_flush_count * 1000ULL) : 0;
+
+	return sprintf(buf, "%llu\n", avg);
+}
+static DEVICE_ATTR_RO(flush_avg_us);
+
+static ssize_t flush_max_us_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%llu\n", div64_u64(nt35510_flush_ns_max, 1000ULL));
+}
+static DEVICE_ATTR_RO(flush_max_us);
 
 static struct nt35510_drvdata default_nt35510_drvdata = {
 	.xres = NT35510_DEFAULT_XRES,
@@ -523,15 +586,23 @@ static void nt35510_flush_rect_locked(struct nt35510_drvdata *drvdata,
 {
 	u32 x, y;
 	u16 *pixels = drvdata->fbmem;
+	void __iomem *data_reg = drvdata->regs + (NT35510_DATA_OFFSET << 2);
 
 	if (!pixels || nt35510_set_window(drvdata, x0, y0, x1, y1))
 		return;
 
 	nt35510_out32(drvdata, NT35510_INST_OFFSET, 0x2C00);
 	for (y = y0; y <= y1; y++) {
-		for (x = x0; x <= x1; x++)
-			writel_relaxed(pixels[y * drvdata->xres + x],
-					drvdata->regs + (NT35510_DATA_OFFSET << 2));
+		u16 *row = &pixels[y * drvdata->xres];
+
+		for (x = x0; x + 3 <= x1; x += 4) {
+			writel_relaxed(row[x], data_reg);
+			writel_relaxed(row[x + 1], data_reg);
+			writel_relaxed(row[x + 2], data_reg);
+			writel_relaxed(row[x + 3], data_reg);
+		}
+		for (; x <= x1; x++)
+			writel_relaxed(row[x], data_reg);
 	}
 	/*
 	 * The pixel port is a register-based FIFO.  Relaxed MMIO writes to the
@@ -542,28 +613,41 @@ static void nt35510_flush_rect_locked(struct nt35510_drvdata *drvdata,
 	wmb();
 }
 
-static void nt35510_flush_rows_locked(struct nt35510_drvdata *drvdata,
-			u32 y0, u32 y1)
-{
-	if (!drvdata->yres || y0 >= drvdata->yres)
-		return;
-	if (y1 >= drvdata->yres)
-		y1 = drvdata->yres - 1;
-	nt35510_flush_rect_locked(drvdata, 0, y0, drvdata->xres - 1, y1);
-}
-
 static void nt35510_flush_bytes_locked(struct nt35510_drvdata *drvdata,
 		unsigned long start, unsigned long end)
 {
-	u32 y0, y1;
+	u32 line_bytes;
+	u32 x0, y0, x1, y1;
 
 	if (!drvdata->fbmem || start >= end || start >= drvdata->fbsize)
 		return;
 	if (end > drvdata->fbsize)
 		end = drvdata->fbsize;
-	y0 = start / (drvdata->xres * BYTES_PER_PIXEL);
-	y1 = (end - 1) / (drvdata->xres * BYTES_PER_PIXEL);
-	nt35510_flush_rows_locked(drvdata, y0, y1);
+
+	/*
+	 * Deferred-I/O hands us dirty page ranges, which are byte offsets into
+	 * the shadow framebuffer.  Map the byte range back to pixel columns and
+	 * flush only the exact dirty rectangle.  The previous row-based mapping
+	 * redrew 480 pixels for every touched row, which is what made a small
+	 * software cursor move cost a nearly full-row LCD transfer.
+	 */
+	line_bytes = drvdata->xres * BYTES_PER_PIXEL;
+	y0 = start / line_bytes;
+	x0 = (start % line_bytes) / BYTES_PER_PIXEL;
+	y1 = (end - 1) / line_bytes;
+	x1 = ((end - 1) % line_bytes) / BYTES_PER_PIXEL;
+
+	if (y0 == y1) {
+		nt35510_flush_rect_locked(drvdata, x0, y0, x1, y1);
+		return;
+	}
+
+	/* First partial row, full middle rows, last partial row. */
+	nt35510_flush_rect_locked(drvdata, x0, y0, drvdata->xres - 1, y0);
+	if (y1 > y0 + 1)
+		nt35510_flush_rect_locked(drvdata, 0, y0 + 1,
+					  drvdata->xres - 1, y1 - 1);
+	nt35510_flush_rect_locked(drvdata, 0, y1, x1, y1);
 }
 
 static void nt35510fb_deferred_io(struct fb_info *info,
@@ -572,9 +656,11 @@ static void nt35510fb_deferred_io(struct fb_info *info,
 	struct nt35510_drvdata *drvdata = info->par;
 	struct page *page;
 	unsigned long first = 0, end = 0, page_start;
+	u64 flush_start, flush_dt;
 
 	/* The page list is sorted by index.  Coalesce adjacent pages into rows. */
 	mutex_lock(&drvdata->lock);
+	flush_start = ktime_get_ns();
 	list_for_each_entry(page, pagelist, lru) {
 		page_start = page->index << PAGE_SHIFT;
 		if (!end) {
@@ -592,6 +678,13 @@ static void nt35510fb_deferred_io(struct fb_info *info,
 	}
 	if (end)
 		nt35510_flush_bytes_locked(drvdata, first, end);
+	flush_dt = ktime_get_ns() - flush_start;
+	if (end) {
+		nt35510_flush_count++;
+		nt35510_flush_ns_total += flush_dt;
+		if (flush_dt > nt35510_flush_ns_max)
+			nt35510_flush_ns_max = flush_dt;
+	}
 	mutex_unlock(&drvdata->lock);
 }
 
@@ -757,7 +850,7 @@ static int nt35510fb_register(struct platform_device *pdev,
 		goto err_release;
 
 	drvdata->fbdefio.delay = max_t(unsigned long, 1,
-			HZ / NT35510_DEFAULT_DEFIO_HZ);
+			HZ / nt35510_defio_hz);
 	drvdata->fbdefio.deferred_io = nt35510fb_deferred_io;
 	info->fbdefio = &drvdata->fbdefio;
 	fb_deferred_io_init(info);
@@ -930,6 +1023,9 @@ static int nt35510_of_probe(struct platform_device *pdev)
 	}
 
 	drvdata->device = device;
+	device_create_file(device, &dev_attr_flush_count);
+	device_create_file(device, &dev_attr_flush_avg_us);
+	device_create_file(device, &dev_attr_flush_max_us);
 	nt35510s[0] = drvdata;
 	dev_info(device, "nt35510: character device and fb0 ready, %ux%u, reg=%p\n",
 			drvdata->xres, drvdata->yres, drvdata->regs);

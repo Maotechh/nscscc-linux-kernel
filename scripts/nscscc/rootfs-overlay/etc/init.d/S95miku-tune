@@ -1,0 +1,21 @@
+#!/bin/sh
+
+PARAM=/sys/module/nt35510/parameters/defio_hz
+
+case "$1" in
+    start)
+        if [ -w "$PARAM" ]; then
+            echo 80 > "$PARAM" && echo "miku-tune: defio_hz=$(cat "$PARAM")"
+        fi
+        ;;
+    stop)
+        ;;
+    restart)
+        "$0" stop
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}" >&2
+        exit 1
+        ;;
+esac

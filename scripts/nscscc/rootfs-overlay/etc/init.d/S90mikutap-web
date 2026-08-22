@@ -1,0 +1,35 @@
+#!/bin/sh
+
+DAEMON=/usr/sbin/mikutap-web-server
+PIDFILE=/var/run/mikutap-web.pid
+LOGFILE=/var/log/mikutap-web.log
+WWWROOT=/www/mikutap
+BTNPATH=/sys/class/chiplab_confreg/chiplab_confreg/btn_key
+
+case "$1" in
+    start)
+        echo "Starting mikutap web server"
+        mkdir -p /var/run /var/log
+        if [ -x "$DAEMON" ] && [ -d "$WWWROOT" ]; then
+            nice -n 5 "$DAEMON" -p 80 -r "$WWWROOT" -b "$BTNPATH" -i 10 \
+                >"$LOGFILE" 2>&1 &
+            echo $! >"$PIDFILE"
+        fi
+        ;;
+    stop)
+        if [ -s "$PIDFILE" ]; then
+            kill "$(cat "$PIDFILE")" 2>/dev/null || true
+            rm -f "$PIDFILE"
+        fi
+        killall mikutap-web-server 2>/dev/null || true
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}" >&2
+        exit 1
+        ;;
+esac
